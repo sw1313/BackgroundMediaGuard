@@ -7,7 +7,7 @@
     <string name="status_connected">模块框架已连接</string>
     <string name="status_disconnected">模块框架未连接</string>
     <string name="status_waiting">正在等待 LSPosed / SPosed 服务</string>
-    <string name="status_disconnected_detail">请确认模块已启用。推荐勾选 system、PowerKeeper，以及 Emby / Plex / Jellyfin。控制层或 Emby JS 桥接还需目标应用在作用域中</string>
+    <string name="status_disconnected_detail">请确认模块已启用。推荐勾选 system、PowerKeeper，以及 Emby / Plex / Jellyfin。控制层或片尾 JS 桥接还需目标应用在作用域中</string>
     <string name="show_protection_settings">保护设置</string>
     <string name="hide_protection_settings">收起保护设置</string>
 
@@ -32,8 +32,8 @@
     <string name="setting_control_keepalive">控制层后台可见性保持</string>
     <string name="setting_control_keepalive_summary">针对：Emby/Plex/Jellyfin 等混合应用能播完当前集，但后台超过数分钟后无法自动下一集。保持 WebView/RN 控制层可运行；开启时会请求把本应用加入 LSPosed 作用域，同意后请强停应用再测。</string>
 
-    <string name="setting_emby_js_bridge">Emby 片尾 JS 桥接</string>
-    <string name="setting_emby_js_bridge_summary">仅 Emby：片尾 ended 进 WebView 以触发自动下一集。开启后直达 evaluateJavascript，并请求加入 LSPosed 作用域。系统层还会放行后台 MediaService 前台服务，否则下一集会在 startForeground 处被拦。同意后请强停 Emby 再测。</string>
+    <string name="setting_emby_js_bridge">片尾 JS 桥接</string>
+    <string name="setting_emby_js_bridge_summary">面向 Emby 及改包名的兼容客户端：把片尾 ended 送达 WebView 以触发自动下一集，并请求加入 LSPosed 作用域。系统层还会在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。同意后请强停目标应用再测。</string>
 
     <string name="setting_grace">播放停止后的保护宽限期</string>
     <string name="setting_grace_summary">针对：切集、缓冲间隙被系统立刻降权。在播放停止后继续保护一段时间，便于自动连播。</string>
@@ -43,7 +43,7 @@
     <string name="scope_request_failed">请求作用域失败：%1$s</string>
     <string name="restart_scope">重启模块作用域</string>
     <string name="restart_scope_title">重启模块作用域？</string>
-    <string name="restart_scope_message">将软重启系统框架及已勾选作用域中的进程。推荐包含 system、PowerKeeper 与 Emby/Plex/Jellyfin；控制层或 Emby JS 桥接还需目标应用在作用域中。正在运行的应用会暂时退出。</string>
+    <string name="restart_scope_message">将软重启系统框架及已勾选作用域中的进程。推荐包含 system、PowerKeeper 与 Emby/Plex/Jellyfin；控制层或片尾 JS 桥接还需目标应用在作用域中。正在运行的应用会暂时退出。</string>
     <string name="restart_scope_confirm">立即重启</string>
     <string name="restart_scope_started">正在重启系统框架…</string>
     <string name="restart_scope_failed">重启失败，请确认已授予 root 权限</string>

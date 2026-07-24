@@ -1,7 +1,6 @@
 package io.github.sw1313.backgroundmediaguard.ui
 
 import android.os.Bundle
-import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.ImageView
@@ -23,13 +22,11 @@ class AppSettingsActivity : AppCompatActivity() {
     private lateinit var freezer: MaterialSwitch
     private lateinit var alwaysProtect: MaterialSwitch
     private lateinit var controlKeepAlive: MaterialSwitch
-    private lateinit var embyJsBridgeGroup: View
-    private lateinit var embyJsBridge: MaterialSwitch
+    private lateinit var jsBridge: MaterialSwitch
     private lateinit var grace: AutoCompleteTextView
 
     private var loading = false
     private var service: XposedService? = null
-    private val isEmby get() = targetPackage == Settings.PACKAGE_EMBY
     private val graceValues = intArrayOf(30, 60, 120, 300)
     private val graceLabels = listOf("30 秒", "60 秒", "120 秒（推荐）", "5 分钟")
     private val serviceListener: (XposedService?) -> Unit = { value ->
@@ -57,10 +54,8 @@ class AppSettingsActivity : AppCompatActivity() {
         freezer = findViewById(R.id.freezer)
         alwaysProtect = findViewById(R.id.always_protect)
         controlKeepAlive = findViewById(R.id.control_keepalive)
-        embyJsBridgeGroup = findViewById(R.id.emby_js_bridge_group)
-        embyJsBridge = findViewById(R.id.emby_js_bridge)
+        jsBridge = findViewById(R.id.emby_js_bridge)
         grace = findViewById(R.id.grace)
-        embyJsBridgeGroup.visibility = if (isEmby) View.VISIBLE else View.GONE
         grace.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, graceLabels),
         )
@@ -106,10 +101,10 @@ class AppSettingsActivity : AppCompatActivity() {
             }
             if (checked) requestAppScope()
         }
-        embyJsBridge.setOnCheckedChangeListener { _, checked ->
-            if (loading || !isEmby) return@setOnCheckedChangeListener
+        jsBridge.setOnCheckedChangeListener { _, checked ->
+            if (loading) return@setOnCheckedChangeListener
             editPrefs {
-                putBoolean(Settings.appKey(Settings.KEY_EMBY_JS_BRIDGE, targetPackage), checked)
+                putBoolean(Settings.appKey(Settings.KEY_JS_BRIDGE, targetPackage), checked)
             }
             if (checked) requestAppScope()
         }
@@ -174,15 +169,15 @@ class AppSettingsActivity : AppCompatActivity() {
 
     private fun bindService(value: XposedService?) {
         service = value
-        val controls = mutableListOf(
+        val controls = listOf(
             appEnabled,
             audioHardening,
             hyperOsZeroData,
             freezer,
             alwaysProtect,
             controlKeepAlive,
+            jsBridge,
         )
-        if (isEmby) controls += embyJsBridge
         controls.forEach { it.isEnabled = value != null }
         grace.isEnabled = value != null
         if (value == null) return
@@ -216,13 +211,11 @@ class AppSettingsActivity : AppCompatActivity() {
             Settings.KEY_CONTROL_KEEPALIVE,
             false,
         )
-        if (isEmby) {
-            embyJsBridge.isChecked = appBoolean(
-                prefs,
-                Settings.KEY_EMBY_JS_BRIDGE,
-                Settings.DEFAULT_EMBY_JS_BRIDGE,
-            )
-        }
+        jsBridge.isChecked = appBoolean(
+            prefs,
+            Settings.KEY_JS_BRIDGE,
+            Settings.defaultJsBridge(targetPackage),
+        )
         val graceSeconds = appInt(
             prefs,
             Settings.KEY_GRACE_SECONDS,

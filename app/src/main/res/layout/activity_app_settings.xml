@@ -187,31 +187,23 @@
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
-                    <LinearLayout
-                        android:id="@+id/emby_js_bridge_group"
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/emby_js_bridge"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
+                        android:minHeight="48dp"
+                        android:text="@string/setting_emby_js_bridge"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
 
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/emby_js_bridge"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="48dp"
-                            android:text="@string/setting_emby_js_bridge"
-                            android:textAppearance="?attr/textAppearanceBodyLarge" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="4dp"
-                            android:paddingEnd="4dp"
-                            android:paddingBottom="12dp"
-                            android:text="@string/setting_emby_js_bridge_summary"
-                            android:textAppearance="?attr/textAppearanceBodySmall"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-                    </LinearLayout>
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:paddingBottom="12dp"
+                        android:text="@string/setting_emby_js_bridge_summary"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         style="@style/Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu"

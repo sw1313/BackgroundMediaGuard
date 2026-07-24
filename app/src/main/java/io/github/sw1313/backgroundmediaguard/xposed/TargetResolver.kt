@@ -62,15 +62,14 @@ class TargetResolver(
             isSelectedUid(uid) &&
             appBoolean(packageName, Settings.KEY_CONTROL_KEEPALIVE, false)
 
-    fun shouldUseEmbyJsBridge(packageName: String, uid: Int): Boolean =
+    fun shouldUseJsBridge(packageName: String, uid: Int): Boolean =
         enabled &&
-            packageName == Settings.PACKAGE_EMBY &&
             packageName in readTargets() &&
             isSelectedUid(uid) &&
             appBoolean(
                 packageName,
-                Settings.KEY_EMBY_JS_BRIDGE,
-                Settings.DEFAULT_EMBY_JS_BRIDGE,
+                Settings.KEY_JS_BRIDGE,
+                Settings.defaultJsBridge(packageName),
             )
 
     fun isSelectedProcess(processRecord: Any?): Boolean {

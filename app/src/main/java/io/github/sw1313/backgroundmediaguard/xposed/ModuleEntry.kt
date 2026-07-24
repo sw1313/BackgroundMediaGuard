@@ -93,8 +93,8 @@ class ModuleEntry : XposedModule() {
                 ControlLayerVisibilityHook(this, packageName).install(param.classLoader)
             }
         }
-        if (resolver.shouldUseEmbyJsBridge(packageName, uid)) {
-            installSafely("Emby JS 桥接") {
+        if (resolver.shouldUseJsBridge(packageName, uid)) {
+            installSafely("片尾 JS 桥接 ($packageName)") {
                 EmbyJsBridgeHook(this, packageName).install(param.classLoader)
             }
         }
