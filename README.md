@@ -5,7 +5,7 @@
 面向 **LSPosed / 现代 libxposed API 101–102** 的 Xposed 模块。  
 在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**与**自动切集**相关保护，而不是全局关闭系统省电策略。
 
-当前版本：**1.3.1**
+当前版本：**1.3.2**
 
 ---
 
@@ -15,7 +15,8 @@
 
 | 现象 | 典型原因 |
 |------|----------|
-| 退到后台约一分钟后无声 | Android AudioHardening / HyperOS 零数据暂停 |
+| 退到后台约一分钟后被系统静音 | Android AudioHardening |
+| 后台播放中遇到约一分钟无声段后停止续播 | 澎湃 OS / HyperOS 零数据暂停 |
 | 进程还在，但播放卡住、通知消失 | 缓存冻结（Cached App Freezer）、OOM 降权 |
 | 能播完当前集，后台却无法自动下一集 | 混合应用（WebView / React Native）控制层被暂停；或片尾后无法再次进入前台服务 |
 
@@ -36,7 +37,7 @@
 
 ### HyperOS（`com.miui.powerkeeper`）
 
-- **零数据暂停保护**（可选）：拦截 PowerKeeper 因「连续约 60 秒无音频数据」而暂停音轨的逻辑。  
+- **零数据暂停保护**（可选）：澎湃 OS / HyperOS 在后台播放时，若连续约 60 秒检测不到音频数据（无声段），会暂停音轨导致无法继续播放。本项拦截 PowerKeeper 该逻辑。  
   通用 MediaSession 保护无法单独覆盖该路径，因此需要勾选 PowerKeeper。
 
 ### 应用进程内（目标 App 需在 LSPosed 作用域中）
@@ -59,7 +60,7 @@
 | 包名 | 用途 |
 |------|------|
 | `system` | 音频、会话、OOM、冻结、FGS 等系统保护（**必选**） |
-| `com.miui.powerkeeper` | HyperOS 零数据暂停（小米机强烈建议） |
+| `com.miui.powerkeeper` | 澎湃 OS / HyperOS 零数据暂停（小米机强烈建议） |
 | `com.mb.android` | Emby（控制层 / JS 桥接） |
 | `com.plexapp.android` | Plex（控制层） |
 | `org.jellyfin.mobile` | Jellyfin（控制层） |
@@ -88,7 +89,7 @@
 1. 主列表启用 Emby。
 2. 齿轮中建议打开：
    - 放行后台音频
-   - HyperOS 零数据暂停保护（小米）
+   - 澎湃 OS / HyperOS 零数据暂停保护（小米）
    - 媒体活动时阻止缓存冻结
    - 控制层后台可见性保持
    - **片尾 JS 桥接**（官方 Emby 默认已开；改包版请手动打开）
@@ -105,8 +106,8 @@ Plex / Jellyfin：通常打开「控制层后台可见性保持」即可；非 E
 |------|------|------|
 | 启用模块 | 开 | 总开关 |
 | 启用此应用的媒体保护 | 开 | 加入保护列表 |
-| 放行后台音频 | 开 | 约一分钟静音 |
-| HyperOS 零数据暂停保护 | HyperOS 开 | 厂商音轨暂停 |
+| 放行后台音频 | 开 | 后台约一分钟后被系统静音 |
+| 澎湃 OS / HyperOS 零数据暂停保护 | 小米开 | 后台无声段约一分钟后停止续播 |
 | 媒体活动时阻止缓存冻结 | 开 | 假死、通知消失 |
 | 始终保护 | 默认关 | 无 MediaSession 时兜底，更耗电 |
 | 控制层后台可见性保持 | 混合 App 开 | WebView/RN 切集 |
@@ -128,7 +129,7 @@ adb shell dumpsys audio
 期望现象（因机型而异）：
 
 - 选中应用在媒体会话活跃时，不再因 AudioHardening 被真正静音。
-- HyperOS 上不再因零数据策略误暂停音轨。
+- 澎湃 OS / HyperOS 上，后台播放遇到无声段时不再被零数据策略误暂停续播。
 - Emby 片尾日志中可见 `sendJavaScript(ended)`，以及系统侧 `放行后台 startForeground`；会话应进入下一集并保持 `PLAYING`。
 
 Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，以实际听感与 `dumpsys` 为准。

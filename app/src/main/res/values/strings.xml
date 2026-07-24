@@ -20,8 +20,8 @@
     <string name="setting_audio_hardening">放行后台音频</string>
     <string name="setting_audio_hardening_summary">针对：后台约一分钟后声音被系统静音或掐断。放行 Android 后台音频加固相关限制。</string>
 
-    <string name="setting_hyperos_zero_data">HyperOS 零数据暂停保护</string>
-    <string name="setting_hyperos_zero_data_summary">针对：小米/HyperOS 上后台播放约一分钟后无声。拦截 PowerKeeper 因连续零数据而暂停音轨。</string>
+    <string name="setting_hyperos_zero_data">澎湃 OS / HyperOS 零数据暂停保护</string>
+    <string name="setting_hyperos_zero_data_summary">针对：后台播放时若出现约一分钟的无声段（无音频数据），系统会暂停音轨导致无法继续播放。拦截 PowerKeeper 因连续零数据而暂停音轨的逻辑。</string>
 
     <string name="setting_freezer">媒体活动时阻止缓存冻结</string>
     <string name="setting_freezer_summary">针对：进程仍在但播放卡住、通知栏控件消失。媒体会话活跃期间阻止系统缓存冻结该进程。</string>

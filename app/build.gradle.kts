@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.sw1313.backgroundmediaguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.3.1"
+        versionCode = 15
+        versionName = "1.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
