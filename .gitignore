@@ -1,3 +1,6 @@
+# Local helpers
+.git-commit-msg.txt
+
 # Build
 /.gradle/
 /.kotlin/
