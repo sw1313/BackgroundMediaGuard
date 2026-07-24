@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">后台媒体守护</string>
+    <string name="module_description">为选中的媒体应用提供后台播放与切集保护</string>
+    <string name="app_subtitle">为选中的媒体应用提供后台播放保护</string>
+    <string name="status_connecting">正在连接框架</string>
+    <string name="status_connected">模块框架已连接</string>
+    <string name="status_disconnected">模块框架未连接</string>
+    <string name="status_waiting">正在等待 LSPosed / SPosed 服务</string>
+    <string name="status_disconnected_detail">请确认模块已启用。推荐勾选 system、PowerKeeper，以及 Emby / Plex / Jellyfin。控制层或 Emby JS 桥接还需目标应用在作用域中</string>
+    <string name="show_protection_settings">保护设置</string>
+    <string name="hide_protection_settings">收起保护设置</string>
+
+    <string name="setting_enabled">启用模块</string>
+    <string name="setting_enabled_summary">总开关。关闭后所有应用的保护立即失效。</string>
+
+    <string name="setting_app_enabled">启用此应用的媒体保护</string>
+    <string name="setting_app_enabled_summary">把本应用加入保护列表。关闭后下列选项对该应用不生效。</string>
+
+    <string name="setting_audio_hardening">放行后台音频</string>
+    <string name="setting_audio_hardening_summary">针对：后台约一分钟后声音被系统静音或掐断。放行 Android 后台音频加固相关限制。</string>
+
+    <string name="setting_hyperos_zero_data">HyperOS 零数据暂停保护</string>
+    <string name="setting_hyperos_zero_data_summary">针对：小米/HyperOS 上后台播放约一分钟后无声。拦截 PowerKeeper 因连续零数据而暂停音轨。</string>
+
+    <string name="setting_freezer">媒体活动时阻止缓存冻结</string>
+    <string name="setting_freezer_summary">针对：进程仍在但播放卡住、通知栏控件消失。媒体会话活跃期间阻止系统缓存冻结该进程。</string>
+
+    <string name="setting_always_protect">始终保护</string>
+    <string name="setting_always_protect_summary">针对：应用几乎不发布 MediaSession，普通保护跟不上。始终按前台媒体保护，更耗电，一般不必开。</string>
+
+    <string name="setting_control_keepalive">控制层后台可见性保持</string>
+    <string name="setting_control_keepalive_summary">针对：Emby/Plex/Jellyfin 等混合应用能播完当前集，但后台超过数分钟后无法自动下一集。保持 WebView/RN 控制层可运行；开启时会请求把本应用加入 LSPosed 作用域，同意后请强停应用再测。</string>
+
+    <string name="setting_emby_js_bridge">Emby 片尾 JS 桥接</string>
+    <string name="setting_emby_js_bridge_summary">仅 Emby：片尾 ended 进 WebView 以触发自动下一集。开启后直达 evaluateJavascript，并请求加入 LSPosed 作用域。系统层还会放行后台 MediaService 前台服务，否则下一集会在 startForeground 处被拦。同意后请强停 Emby 再测。</string>
+
+    <string name="setting_grace">播放停止后的保护宽限期</string>
+    <string name="setting_grace_summary">针对：切集、缓冲间隙被系统立刻降权。在播放停止后继续保护一段时间，便于自动连播。</string>
+
+    <string name="scope_request_prompted">已请求加入 LSPosed 作用域，请在弹窗中确认</string>
+    <string name="scope_request_approved">作用域已更新，请强停目标应用后重试</string>
+    <string name="scope_request_failed">请求作用域失败：%1$s</string>
+    <string name="restart_scope">重启模块作用域</string>
+    <string name="restart_scope_title">重启模块作用域？</string>
+    <string name="restart_scope_message">将软重启系统框架及已勾选作用域中的进程。推荐包含 system、PowerKeeper 与 Emby/Plex/Jellyfin；控制层或 Emby JS 桥接还需目标应用在作用域中。正在运行的应用会暂时退出。</string>
+    <string name="restart_scope_confirm">立即重启</string>
+    <string name="restart_scope_started">正在重启系统框架…</string>
+    <string name="restart_scope_failed">重启失败，请确认已授予 root 权限</string>
+    <string name="cancel">取消</string>
+    <string name="section_apps">应用适配</string>
+    <string name="app_settings">应用保护设置</string>
+    <string name="search_hint">搜索应用名称或包名</string>
+    <string name="show_system_apps">显示系统应用</string>
+    <string name="selected_count">已选择 %1$d 个</string>
+    <string name="apps_loading">正在读取已安装应用…</string>
+    <string name="apps_empty">没有找到符合条件的应用</string>
+    <string name="apps_load_failed">读取应用列表失败</string>
+</resources>

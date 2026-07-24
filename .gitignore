@@ -1,0 +1,38 @@
+# Build
+/.gradle/
+/.kotlin/
+/.idea/
+/**/build/
+*.iml
+local.properties
+captures/
+*.apk
+*.ap_
+*.aab
+
+# Logs / device dumps (local debugging only)
+*.log
+crash-pull/
+device-apks/
+adb_*.txt
+adb_*.log
+adb_*.err
+lsposed_*.log
+media_session_*.txt
+emby_*.txt
+opening_silence_hits.txt
+
+# Local analysis / vendor dumps (do not publish)
+emby-jadx/
+plex-jadx/
+tools/
+*-release.apk
+*.dex
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
