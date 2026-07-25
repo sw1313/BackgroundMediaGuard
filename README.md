@@ -6,7 +6,7 @@
 面向 **LSPosed / 现代 libxposed API 101–102** 的 Xposed 模块。  
 在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**、**自动切集**相关保护，以及官方 **Plex** 的若干客户端兼容修复；不是全局关闭系统省电策略。
 
-当前版本：**1.4.16**  
+当前版本：**1.4.26**  
 下载：[Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest)
 
 ---
@@ -24,10 +24,11 @@
 | Plex 关画中画后停播、控件消失 | 退出 PiP 时误发 `Stop` |
 | Plex 后台控件显示 0:00 / 无进度条 / 点不回前台 | 媒体通知误开 chronometer，且 `contentIntent` 为空 |
 | Plex 切下一集后回前台偶发黑屏（有声无画） | Surface 未可靠重绑 |
-| Plex 点控件回前台 / 息屏后从头播或停在暂停 | 激进 Intent 重挂载、系统注入 BACK，或回前台未走引擎 resume |
+| Plex 点控件回前台 / 息屏 / 未加载完就回后台后从头播 | 激进 Intent 重挂载，或重建开播时 startPosition/seek 被写成 0 |
+| Plex 画中画/息屏后 Error Occurred | Surface 拆卸过晚，HEVC 解码器进入 ERROR |
 
 本模块按应用开启保护，尽量只在「正在播 / 刚切集」的窗口内介入。  
-**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播等问题，用齿轮里的 **Plex 兼容修复**（四个独立开关）按需开启即可。
+**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播 / Error Occurred 等问题，用齿轮里的 **Plex 兼容修复**（五个独立开关）按需开启即可。
 
 ---
 
@@ -51,14 +52,15 @@
 
 - **控制层后台可见性保持**（可选）：保持 WebView / React Native 控制层可调度。主要用于 **Emby** 等混合客户端；**Plex / Jellyfin 后台切集通常正常，一般不必开**。
 - **片尾 JS 桥接**（可选）：面向 Emby 及改包名兼容客户端，将片尾事件可靠送达页面脚本，配合系统侧 FGS 放行完成自动下一集。官方包名 `com.mb.android` **默认开启**，其他应用需在齿轮里手动打开。
-- **Plex 兼容修复**（仅官方 `com.plexapp.android` 齿轮可见，**默认关**，**四个独立开关**）：
+- **Plex 兼容修复**（仅官方 `com.plexapp.android` 齿轮可见，**默认关**，**五个独立开关**）：
 
   | 开关 | 针对现象 | 做法概要 |
   |------|----------|----------|
   | 关闭画中画后继续后台播放 | 关 PiP 停播、控件消失 | 退出 PiP 时跳过误发的 `Stop` |
   | 修复后台播放控件 | 0:00 / 无进度条 / 点不回前台 | 关 chronometer、补 `contentIntent` / 时长、软化拉起 Intent |
   | 回前台恢复画面 | 切集后回前台偶发黑屏（有声无画） | `attachView` 后轻量重绑 Surface |
-  | 防止息屏/回前台后从头播放 | 息屏后进度被拉回开头，或回前台有画不播 | 记进度 + 短窗拦误 seek→0；回前台走引擎原生 `H0()`/`play()`（不禁视频轨、不主动卸 Surface） |
+  | 防止息屏/回前台后从头播放 | 息屏/退 PiP/点控件/未加载完回后台后进度回到开头 | 软 Intent + 记住 startPosition + 拦 seek→0 + 纠正重建开播进度（不拦返回键） |
+  | 防止画中画/息屏 Error Occurred | 弹 Error Occurred（HEVC / MediaCodecVideoRenderer） | `surfaceDestroyed` 同步卸面 + 吞拆面超时（不强制重绑画面） |
 
 ### 配置方式
 
@@ -118,13 +120,14 @@
 - **通用续播**：按需打开放行后台音频、零数据暂停、阻止冻结等系统侧开关即可。
 - **Plex 额外问题**（官方 `com.plexapp.android`）：
   1. 主列表启用 Plex，打开齿轮。
-  2. **只打开你遇到的开关**（四个互相独立，默认全关）：
+  2. **只打开你遇到的开关**（五个互相独立，默认全关）：
      - 关画中画会停 →「关闭画中画后继续后台播放」
      - 控件 0:00 / 点不回前台 →「修复后台播放控件」
      - 切集后回前台黑屏 →「回前台恢复画面」
-     - 息屏后从头播 / 回前台不续播 →「防止息屏/回前台后从头播放」
+     - 息屏/未加载完回后台后从头播 →「防止息屏/回前台后从头播放」
+     - 弹 Error Occurred（HEVC）→「防止画中画/息屏 Error Occurred」
   3. 同意作用域弹窗后**强停 Plex**，再按对应场景验证。
-  4. 画中画场景建议同时开「关闭画中画后继续后台播放」；「防从头播」自 1.4.16 起为精简策略，不再禁视频轨。
+  4. 开关各管各的：防从头播≠Error Occurred≠恢复画面；异常缩放时先关「回前台恢复画面」并确认已装 ≥1.4.26。
 
 ---
 
@@ -143,7 +146,8 @@
 | Plex：关闭画中画后继续后台播放 | 遇该问题再开 | 关 PiP 误 Stop；仅官方 Plex |
 | Plex：修复后台播放控件 | 遇该问题再开 | 0:00/无进度条/点不回前台；仅官方 Plex |
 | Plex：回前台恢复画面 | 遇该问题再开 | 切集后偶发黑屏，轻量重绑画面；仅官方 Plex |
-| Plex：防止息屏/回前台后从头播放 | 遇该问题再开 | 记进度、拦误 seek→0、回前台 `H0()` 续播；仅官方 Plex |
+| Plex：防止息屏/回前台后从头播放 | 遇该问题再开 | 软 Intent、记 startPosition、拦 seek→0、纠正重建进度（不拦返回键）；仅官方 Plex |
+| Plex：防止画中画/息屏 Error Occurred | 遇该问题再开 | surfaceDestroyed 同步卸面 + 吞拆面超时（不强制重绑）；仅官方 Plex |
 | 保护宽限期 | 120s+ | 切集间隙防降权 |
 
 ---
@@ -168,8 +172,8 @@ adb shell dumpsys audio
   - `跳过 Stop`
   - `已修补媒体通知` / `重写 session/通知拉起 Intent`
   - `重绑播放画面`（「回前台恢复画面」）
-  - `记住进度` / `拦截 Exo seek` / `回前台续播`（「防从头播」）
-  - `忽略系统注入 BACK`
+  - `记下目标进度` / `纠正开播起始` / `拦截 Exo seek` / `纠正被重置的进度`（「防从头播」）
+  - `已同步卸掉 Video Surface` / `吞掉 Surface 拆卸错误`（「防 Error Occurred」）
 - `dumpsys media_session` 中 Plex 会话宜为 `PLAYING` / `PAUSED`，而不是长期卡在 `ERROR`。
 
 Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，以实际听感与 `dumpsys` 为准。
@@ -178,12 +182,16 @@ Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，
 
 ## 更新说明
 
-### 1.4.16
+### 1.4.26
 
-- **大幅精简 Plex「防从头播」**：删除禁视频轨、吞解码 ERROR、watchdog、多层 recover/prepare。
-- 息屏只记住进度；短保护窗内拦截底层误 `seek→0`；回前台走 `of.k.H0()`（与 `EngineManager.resume` 同源）+ `play()`。
-- 画面交给 Plex 自己的 `surfaceCreated`；「回前台恢复画面」仍仅做轻量重绑。
-- 更新 README / 开关说明文案。
+相对 1.4.16 的主要变化：
+
+- 新增独立开关：**防止画中画/息屏 Error Occurred**（HEVC / MediaCodecVideoRenderer）。`surfaceDestroyed` 同步卸面 + 吞拆面超时；**不做** `surfaceCreated` 强制重绑，避免 PiP 小窗叠到全屏异常缩放。
+- **防从头播**重做为纯进度路径：软化拉起 Intent；捕获 `setMediaItems`/`Seek` 目标进度；`onPause` 武装保护；拦 seek→0；重建开播近 0 时改写 `startPosition`；回前台多段纠正。**不拦返回键**（手势返回与系统注入无法可靠区分）。
+- 五个 Plex 开关继续互相独立；画面黑屏仍用「回前台恢复画面」。
+- 同步更新应用内开关说明与 README。
+
+中间迭代（1.4.17–1.4.25）曾尝试拦 BACK / PiP Surface 旁路等，已收敛为上述策略。
 
 ### 1.4.6
 

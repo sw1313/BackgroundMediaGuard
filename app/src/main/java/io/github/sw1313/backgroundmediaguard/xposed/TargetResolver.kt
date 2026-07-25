@@ -99,6 +99,14 @@ class TargetResolver(
             Settings.DEFAULT_PLEX_PREVENT_RESTART,
         )
 
+    fun plexCodecErrorGuard(packageName: String, uid: Int): Boolean =
+        plexFeature(
+            packageName,
+            uid,
+            Settings.KEY_PLEX_CODEC_ERROR_GUARD,
+            Settings.DEFAULT_PLEX_CODEC_ERROR_GUARD,
+        )
+
     private fun plexFeature(
         packageName: String,
         uid: Int,

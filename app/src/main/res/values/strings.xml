@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">后台媒体守护</string>
-    <string name="module_description">为选中的媒体应用提供后台播放、切集保护，以及官方 Plex 兼容修复</string>
+    <string name="module_description">为选中的媒体应用提供后台播放、切集保护，以及官方 Plex 兼容修复（画中画续播、控件、画面、防从头播、防 Error Occurred）</string>
     <string name="app_subtitle">为选中的媒体应用提供后台播放与 Plex 兼容保护</string>
     <string name="status_connecting">正在连接框架</string>
     <string name="status_connected">模块框架已连接</string>
@@ -42,7 +42,10 @@
     <string name="setting_plex_surface_restore_summary">针对：后台自动切到下一集后再回前台，偶发黑屏（有声无画）。在 attachView 后轻量重绑 Surface。偶发问题，需连播切集后再回前台验证。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
 
     <string name="setting_plex_prevent_restart">Plex：防止息屏/回前台后从头播放</string>
-    <string name="setting_plex_prevent_restart_summary">针对：息屏后进度被拉回开头，或回前台有画面却不继续播。精简做法：息屏记住进度；短保护窗内拦截误 seek→0；回前台走 Plex 引擎原生 resume（H0）+ play。不禁视频轨、不主动卸 Surface。画中画场景建议同时开「关画中画继续播」。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
+    <string name="setting_plex_prevent_restart_summary">针对：息屏/退画中画/点控件回前台后进度被拉回开头，或点播放未加载完就回后台后从头播（与黑屏、Error Occurred 无关）。做法：软化回前台 Intent；尽早记住 setMediaItems/Seek 目标进度；onPause 武装保护窗；保护窗内拦 seek→0，若重建开播写成近 0 则改写 startPosition；回前台多段纠正进度。不拦返回键。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
+
+    <string name="setting_plex_codec_error_guard">Plex：防止画中画/息屏 Error Occurred</string>
+    <string name="setting_plex_codec_error_guard_summary">针对：画中画或息屏后弹出 Error Occurred（MediaCodecVideoRenderer / HEVC）。根因是 Surface 被系统拆掉时解码器仍在出帧，而 Plex 异步卸面过晚。开启后在 surfaceDestroyed 同步 clearVideoSurface，并吞掉「Detaching surface timed out」。不做 surfaceCreated 重绑（避免 PiP 小窗叠到全屏）。与「防从头播」「回前台恢复画面」独立；仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
 
     <string name="setting_emby_js_bridge">片尾 JS 桥接</string>
     <string name="setting_emby_js_bridge_summary">针对：Emby 及改包名兼容客户端能播完当前集，但后台仍无法自动下一集。把片尾 ended 送达 WebView，并在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。开启会请求加入作用域，同意后请强停目标应用再测。</string>

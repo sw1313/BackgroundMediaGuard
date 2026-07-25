@@ -12,6 +12,7 @@ object Settings {
     const val KEY_PLEX_MEDIA_NOTIFICATION = "plex_media_notification"
     const val KEY_PLEX_SURFACE_RESTORE = "plex_surface_restore"
     const val KEY_PLEX_PREVENT_RESTART = "plex_prevent_restart"
+    const val KEY_PLEX_CODEC_ERROR_GUARD = "plex_codec_error_guard"
     const val KEY_TARGETS = "targets"
     const val KEY_ALWAYS_PROTECT = "always_protect"
     const val KEY_GRACE_SECONDS = "grace_seconds"
@@ -26,6 +27,7 @@ object Settings {
     const val DEFAULT_PLEX_MEDIA_NOTIFICATION = false
     const val DEFAULT_PLEX_SURFACE_RESTORE = false
     const val DEFAULT_PLEX_PREVENT_RESTART = false
+    const val DEFAULT_PLEX_CODEC_ERROR_GUARD = false
 
     const val PACKAGE_EMBY = "com.mb.android"
     const val PACKAGE_PLEX = "com.plexapp.android"

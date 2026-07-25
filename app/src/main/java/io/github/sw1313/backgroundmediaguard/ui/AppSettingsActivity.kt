@@ -30,6 +30,7 @@ class AppSettingsActivity : AppCompatActivity() {
     private lateinit var plexMediaNotification: MaterialSwitch
     private lateinit var plexSurfaceRestore: MaterialSwitch
     private lateinit var plexPreventRestart: MaterialSwitch
+    private lateinit var plexCodecErrorGuard: MaterialSwitch
     private lateinit var grace: AutoCompleteTextView
 
     private var loading = false
@@ -67,6 +68,7 @@ class AppSettingsActivity : AppCompatActivity() {
         plexMediaNotification = findViewById(R.id.plex_media_notification)
         plexSurfaceRestore = findViewById(R.id.plex_surface_restore)
         plexPreventRestart = findViewById(R.id.plex_prevent_restart)
+        plexCodecErrorGuard = findViewById(R.id.plex_codec_error_guard)
         grace = findViewById(R.id.grace)
         grace.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, graceLabels),
@@ -126,6 +128,7 @@ class AppSettingsActivity : AppCompatActivity() {
         bindPlexSwitch(plexMediaNotification, Settings.KEY_PLEX_MEDIA_NOTIFICATION)
         bindPlexSwitch(plexSurfaceRestore, Settings.KEY_PLEX_SURFACE_RESTORE)
         bindPlexSwitch(plexPreventRestart, Settings.KEY_PLEX_PREVENT_RESTART)
+        bindPlexSwitch(plexCodecErrorGuard, Settings.KEY_PLEX_CODEC_ERROR_GUARD)
         grace.setOnItemClickListener { _, _, position, _ ->
             if (!loading) {
                 editPrefs {
@@ -270,6 +273,11 @@ class AppSettingsActivity : AppCompatActivity() {
                 prefs,
                 Settings.KEY_PLEX_PREVENT_RESTART,
                 Settings.DEFAULT_PLEX_PREVENT_RESTART,
+            )
+            plexCodecErrorGuard.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_PLEX_CODEC_ERROR_GUARD,
+                Settings.DEFAULT_PLEX_CODEC_ERROR_GUARD,
             )
         }
         val graceSeconds = appInt(
