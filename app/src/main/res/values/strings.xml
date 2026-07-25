@@ -7,7 +7,7 @@
     <string name="status_connected">模块框架已连接</string>
     <string name="status_disconnected">模块框架未连接</string>
     <string name="status_waiting">正在等待 LSPosed / SPosed 服务</string>
-    <string name="status_disconnected_detail">请确认模块已启用。推荐勾选 system、PowerKeeper，以及 Emby / Plex / Jellyfin。控制层或片尾 JS 桥接还需目标应用在作用域中</string>
+    <string name="status_disconnected_detail">请确认模块已启用。推荐勾选 system、PowerKeeper；Emby 连播、Plex 兼容修复等还需把对应应用加入作用域</string>
     <string name="show_protection_settings">保护设置</string>
     <string name="hide_protection_settings">收起保护设置</string>
 
@@ -30,10 +30,19 @@
     <string name="setting_always_protect_summary">针对：应用几乎不发布 MediaSession，普通保护跟不上。始终按前台媒体保护，更耗电，一般不必开。</string>
 
     <string name="setting_control_keepalive">控制层后台可见性保持</string>
-    <string name="setting_control_keepalive_summary">针对：Emby/Plex/Jellyfin 等混合应用能播完当前集，但后台超过数分钟后无法自动下一集。保持 WebView/RN 控制层可运行；开启时会请求把本应用加入 LSPosed 作用域，同意后请强停应用再测。</string>
+    <string name="setting_control_keepalive_summary">针对：Emby 等混合应用能播完当前集，但后台无法自动下一集。保持 WebView/RN 控制层可运行；开启时会请求把本应用加入 LSPosed 作用域。Plex / Jellyfin 后台切集通常正常，一般不必开此开关。</string>
+
+    <string name="setting_plex_pip_keep_playing">Plex：关闭画中画后继续后台播放</string>
+    <string name="setting_plex_pip_keep_playing_summary">针对：后台播放时开画中画，直接关掉画中画会停止播放并拆掉媒体控件。开启后关闭画中画不再发 Stop。若你先点一下通知栏播放控件再关画中画，原本就不会停。仅官方 Plex；开启会请求加入作用域，同意后请强停 Plex 再测。</string>
+
+    <string name="setting_plex_media_notification">Plex：修复后台播放控件</string>
+    <string name="setting_plex_media_notification_summary">针对：后台媒体控件显示 0:00、没有可拖进度条、点击无法回前台。根因多为通知误开计时器（chronometer）且 contentIntent 为空。开启后会关掉错误计时展示、补上点击回前台 Intent，并尽量补全 metadata 时长。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
+
+    <string name="setting_plex_surface_restore">Plex：回前台恢复画面</string>
+    <string name="setting_plex_surface_restore_summary">针对：后台自动切到下一集后再回前台，有概率黑屏（有声无画）。回前台时强制重绑 Surface。偶发问题，需后台连播切集后再回前台验证。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
 
     <string name="setting_emby_js_bridge">片尾 JS 桥接</string>
-    <string name="setting_emby_js_bridge_summary">面向 Emby 及改包名的兼容客户端：把片尾 ended 送达 WebView 以触发自动下一集，并请求加入 LSPosed 作用域。系统层还会在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。同意后请强停目标应用再测。</string>
+    <string name="setting_emby_js_bridge_summary">针对：Emby 及改包名兼容客户端能播完当前集，但后台仍无法自动下一集。把片尾 ended 送达 WebView，并在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。开启会请求加入作用域，同意后请强停目标应用再测。</string>
 
     <string name="setting_grace">播放停止后的保护宽限期</string>
     <string name="setting_grace_summary">针对：切集、缓冲间隙被系统立刻降权。在播放停止后继续保护一段时间，便于自动连播。</string>
@@ -42,11 +51,15 @@
     <string name="scope_request_approved">作用域已更新，请强停目标应用后重试</string>
     <string name="scope_request_failed">请求作用域失败：%1$s</string>
     <string name="restart_scope">重启模块作用域</string>
-    <string name="restart_scope_title">重启模块作用域？</string>
-    <string name="restart_scope_message">将软重启系统框架及已勾选作用域中的进程。推荐包含 system、PowerKeeper 与 Emby/Plex/Jellyfin；控制层或片尾 JS 桥接还需目标应用在作用域中。正在运行的应用会暂时退出。</string>
-    <string name="restart_scope_confirm">立即重启</string>
-    <string name="restart_scope_started">正在重启系统框架…</string>
+    <string name="restart_scope_title">选择要重启的作用域</string>
+    <string name="restart_scope_message">勾选要重启的进程。应用内 Hook 强停对应 App 即可；system / PowerKeeper 仅在刚启用模块、新加作用域或更新系统侧逻辑后才需要。</string>
+    <string name="restart_scope_confirm">立即重启所选</string>
+    <string name="restart_scope_started">正在重启所选进程…</string>
+    <string name="restart_scope_none">请至少勾选一项</string>
+    <string name="restart_scope_done">已请求重启所选进程</string>
     <string name="restart_scope_failed">重启失败，请确认已授予 root 权限</string>
+    <string name="restart_item_system">system（软重启系统框架）</string>
+    <string name="restart_item_powerkeeper">PowerKeeper（零数据暂停保护）</string>
     <string name="cancel">取消</string>
     <string name="section_apps">应用适配</string>
     <string name="app_settings">应用保护设置</string>

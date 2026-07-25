@@ -1,9 +1,11 @@
 package io.github.sw1313.backgroundmediaguard.ui
 
 import android.os.Bundle
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -23,6 +25,10 @@ class AppSettingsActivity : AppCompatActivity() {
     private lateinit var alwaysProtect: MaterialSwitch
     private lateinit var controlKeepAlive: MaterialSwitch
     private lateinit var jsBridge: MaterialSwitch
+    private lateinit var plexSection: LinearLayout
+    private lateinit var plexPipKeepPlaying: MaterialSwitch
+    private lateinit var plexMediaNotification: MaterialSwitch
+    private lateinit var plexSurfaceRestore: MaterialSwitch
     private lateinit var grace: AutoCompleteTextView
 
     private var loading = false
@@ -55,10 +61,16 @@ class AppSettingsActivity : AppCompatActivity() {
         alwaysProtect = findViewById(R.id.always_protect)
         controlKeepAlive = findViewById(R.id.control_keepalive)
         jsBridge = findViewById(R.id.emby_js_bridge)
+        plexSection = findViewById(R.id.plex_compat_section)
+        plexPipKeepPlaying = findViewById(R.id.plex_pip_keep_playing)
+        plexMediaNotification = findViewById(R.id.plex_media_notification)
+        plexSurfaceRestore = findViewById(R.id.plex_surface_restore)
         grace = findViewById(R.id.grace)
         grace.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, graceLabels),
         )
+        plexSection.visibility =
+            if (Settings.isPlexPackage(targetPackage)) View.VISIBLE else View.GONE
         wireUi()
     }
 
@@ -108,6 +120,9 @@ class AppSettingsActivity : AppCompatActivity() {
             }
             if (checked) requestAppScope()
         }
+        bindPlexSwitch(plexPipKeepPlaying, Settings.KEY_PLEX_PIP_KEEP_PLAYING)
+        bindPlexSwitch(plexMediaNotification, Settings.KEY_PLEX_MEDIA_NOTIFICATION)
+        bindPlexSwitch(plexSurfaceRestore, Settings.KEY_PLEX_SURFACE_RESTORE)
         grace.setOnItemClickListener { _, _, position, _ ->
             if (!loading) {
                 editPrefs {
@@ -125,6 +140,14 @@ class AppSettingsActivity : AppCompatActivity() {
             if (!loading) {
                 editPrefs { putBoolean(Settings.appKey(key, targetPackage), checked) }
             }
+        }
+    }
+
+    private fun bindPlexSwitch(view: MaterialSwitch, key: String) {
+        view.setOnCheckedChangeListener { _, checked ->
+            if (loading) return@setOnCheckedChangeListener
+            editPrefs { putBoolean(Settings.appKey(key, targetPackage), checked) }
+            if (checked) requestAppScope()
         }
     }
 
@@ -169,7 +192,7 @@ class AppSettingsActivity : AppCompatActivity() {
 
     private fun bindService(value: XposedService?) {
         service = value
-        val controls = listOf(
+        val controls = mutableListOf(
             appEnabled,
             audioHardening,
             hyperOsZeroData,
@@ -178,6 +201,9 @@ class AppSettingsActivity : AppCompatActivity() {
             controlKeepAlive,
             jsBridge,
         )
+        if (Settings.isPlexPackage(targetPackage)) {
+            controls += listOf(plexPipKeepPlaying, plexMediaNotification, plexSurfaceRestore)
+        }
         controls.forEach { it.isEnabled = value != null }
         grace.isEnabled = value != null
         if (value == null) return
@@ -216,6 +242,23 @@ class AppSettingsActivity : AppCompatActivity() {
             Settings.KEY_JS_BRIDGE,
             Settings.defaultJsBridge(targetPackage),
         )
+        if (Settings.isPlexPackage(targetPackage)) {
+            plexPipKeepPlaying.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_PLEX_PIP_KEEP_PLAYING,
+                Settings.DEFAULT_PLEX_PIP_KEEP_PLAYING,
+            )
+            plexMediaNotification.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_PLEX_MEDIA_NOTIFICATION,
+                Settings.DEFAULT_PLEX_MEDIA_NOTIFICATION,
+            )
+            plexSurfaceRestore.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_PLEX_SURFACE_RESTORE,
+                Settings.DEFAULT_PLEX_SURFACE_RESTORE,
+            )
+        }
         val graceSeconds = appInt(
             prefs,
             Settings.KEY_GRACE_SECONDS,

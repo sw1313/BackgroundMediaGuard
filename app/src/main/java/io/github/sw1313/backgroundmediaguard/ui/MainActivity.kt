@@ -11,7 +11,11 @@ import android.os.Bundle
 import android.os.Process
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
@@ -20,6 +24,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MaterialR
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
@@ -266,36 +271,140 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmRestartScope() {
+        val items = buildRestartItems()
+        if (items.isEmpty()) {
+            Toast.makeText(this, R.string.restart_scope_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // MaterialAlertDialog: setMessage + setMultiChoiceItems 会把列表挤没，改用自定义勾选区。
+        val content = LayoutInflater.from(this).inflate(R.layout.dialog_restart_scope, null)
+        val list = content.findViewById<LinearLayout>(R.id.restart_item_list)
+        val scroll = content.findViewById<ScrollView>(R.id.restart_scroll)
+        val checkBoxes = ArrayList<MaterialCheckBox>(items.size)
+        val density = resources.displayMetrics.density
+        for (item in items) {
+            val box = MaterialCheckBox(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
+                text = item.label
+                isChecked = item.checkedByDefault
+                minHeight = (48 * density).toInt()
+            }
+            checkBoxes += box
+            list.addView(box)
+        }
+        scroll.post {
+            val max = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+            if (scroll.height > max) {
+                scroll.layoutParams = scroll.layoutParams.apply { height = max }
+                scroll.requestLayout()
+            }
+        }
+
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.restart_scope_title)
-            .setMessage(R.string.restart_scope_message)
+            .setView(content)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.restart_scope_confirm) { _, _ ->
-                restartSystemServer()
+                val selectedItems = items.filterIndexed { i, _ -> checkBoxes[i].isChecked }
+                if (selectedItems.isEmpty()) {
+                    Toast.makeText(this, R.string.restart_scope_none, Toast.LENGTH_SHORT).show()
+                } else {
+                    restartSelectedScopes(selectedItems)
+                }
             }
             .show()
     }
 
-    private fun restartSystemServer() {
+    private fun buildRestartItems(): List<RestartItem> {
+        val scope = runCatching { service?.scope }.getOrNull().orEmpty().toSet()
+        val items = mutableListOf<RestartItem>()
+
+        // system / PowerKeeper: available always; unchecked by default (prefs usually enough).
+        items += RestartItem(
+            id = RestartItem.ID_SYSTEM,
+            label = getString(R.string.restart_item_system),
+            checkedByDefault = false,
+        )
+        items += RestartItem(
+            id = PACKAGE_POWERKEEPER,
+            label = getString(R.string.restart_item_powerkeeper),
+            checkedByDefault = false,
+            forceStopPackage = PACKAGE_POWERKEEPER,
+        )
+
+        val appPackages = linkedSetOf<String>()
+        appPackages += selected
+        appPackages += scope.filter {
+            it != "system" &&
+                it != "android" &&
+                it != PACKAGE_POWERKEEPER &&
+                it != packageName
+        }
+        for (pkg in appPackages.sorted()) {
+            val label = allApps.firstOrNull { it.packageName == pkg }?.label ?: pkg
+            val inScopeHint = if (pkg in scope || scope.isEmpty()) "" else "（未在 LSPosed 作用域）"
+            items += RestartItem(
+                id = pkg,
+                label = "$label（$pkg）$inScopeHint",
+                // App-process hooks need a process restart after enabling toggles.
+                checkedByDefault = pkg in selected,
+                forceStopPackage = pkg,
+            )
+        }
+        return items
+    }
+
+    private fun restartSelectedScopes(items: List<RestartItem>) {
         Toast.makeText(this, R.string.restart_scope_started, Toast.LENGTH_SHORT).show()
-        thread(name = "restart-system-scope") {
+        thread(name = "restart-selected-scopes") {
+            val commands = mutableListOf<String>()
+            var killSystem = false
+            for (item in items) {
+                when {
+                    item.id == RestartItem.ID_SYSTEM -> killSystem = true
+                    !item.forceStopPackage.isNullOrBlank() ->
+                        commands += "am force-stop ${item.forceStopPackage}"
+                }
+            }
+            // Force-stop apps first; kill system_server last (UI may die).
+            if (killSystem) {
+                commands += "pid=\$(pidof system_server); [ -n \"\$pid\" ] && kill -9 \$pid"
+            }
+            val script = commands.joinToString("; ")
             val succeeded = runCatching {
-                val command =
-                    "pid=\$(pidof system_server); [ -n \"\$pid\" ] && kill -9 \$pid"
-                ProcessBuilder("su", "-c", command)
+                ProcessBuilder("su", "-c", script)
                     .redirectErrorStream(true)
                     .start()
                     .waitFor() == 0
             }.getOrDefault(false)
-            if (!succeeded) {
+            if (!killSystem) {
                 runOnUiThread {
                     Toast.makeText(
                         this,
-                        R.string.restart_scope_failed,
-                        Toast.LENGTH_LONG,
+                        if (succeeded) R.string.restart_scope_done else R.string.restart_scope_failed,
+                        if (succeeded) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
                     ).show()
                 }
             }
         }
+    }
+
+    private data class RestartItem(
+        val id: String,
+        val label: String,
+        var checkedByDefault: Boolean,
+        val forceStopPackage: String? = null,
+    ) {
+        companion object {
+            const val ID_SYSTEM = "system"
+        }
+    }
+
+    companion object {
+        private const val PACKAGE_POWERKEEPER = "com.miui.powerkeeper"
     }
 }

@@ -98,6 +98,21 @@ class ModuleEntry : XposedModule() {
                 EmbyJsBridgeHook(this, packageName).install(param.classLoader)
             }
         }
+
+        val plexPip = resolver.plexPipKeepPlaying(packageName, uid)
+        val plexNotification = resolver.plexMediaNotificationFix(packageName, uid)
+        val plexSurface = resolver.plexSurfaceRestore(packageName, uid)
+        if (plexPip || plexNotification || plexSurface) {
+            installSafely("Plex 兼容修复") {
+                PlexCompatHook(
+                    this,
+                    packageName,
+                    pipKeepPlaying = plexPip,
+                    mediaNotificationFix = plexNotification,
+                    surfaceRestore = plexSurface,
+                ).install(param.classLoader)
+            }
+        }
     }
 
     private fun obtainSystemContext(classLoader: ClassLoader): Context {

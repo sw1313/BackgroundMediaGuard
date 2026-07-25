@@ -72,6 +72,37 @@ class TargetResolver(
                 Settings.defaultJsBridge(packageName),
             )
 
+    fun plexPipKeepPlaying(packageName: String, uid: Int): Boolean =
+        plexFeature(packageName, uid, Settings.KEY_PLEX_PIP_KEEP_PLAYING, Settings.DEFAULT_PLEX_PIP_KEEP_PLAYING)
+
+    fun plexMediaNotificationFix(packageName: String, uid: Int): Boolean =
+        plexFeature(
+            packageName,
+            uid,
+            Settings.KEY_PLEX_MEDIA_NOTIFICATION,
+            Settings.DEFAULT_PLEX_MEDIA_NOTIFICATION,
+        )
+
+    fun plexSurfaceRestore(packageName: String, uid: Int): Boolean =
+        plexFeature(
+            packageName,
+            uid,
+            Settings.KEY_PLEX_SURFACE_RESTORE,
+            Settings.DEFAULT_PLEX_SURFACE_RESTORE,
+        )
+
+    private fun plexFeature(
+        packageName: String,
+        uid: Int,
+        key: String,
+        defaultValue: Boolean,
+    ): Boolean =
+        enabled &&
+            Settings.isPlexPackage(packageName) &&
+            packageName in readTargets() &&
+            isSelectedUid(uid) &&
+            appBoolean(packageName, key, defaultValue)
+
     fun isSelectedProcess(processRecord: Any?): Boolean {
         val identity = identityOf(processRecord) ?: return false
         return isSelectedIdentity(identity)
