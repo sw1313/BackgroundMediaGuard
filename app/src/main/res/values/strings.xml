@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">后台媒体守护</string>
-    <string name="module_description">为选中的媒体应用提供后台播放与切集保护</string>
-    <string name="app_subtitle">为选中的媒体应用提供后台播放保护</string>
+    <string name="module_description">为选中的媒体应用提供后台播放、切集保护，以及官方 Plex 兼容修复</string>
+    <string name="app_subtitle">为选中的媒体应用提供后台播放与 Plex 兼容保护</string>
     <string name="status_connecting">正在连接框架</string>
     <string name="status_connected">模块框架已连接</string>
     <string name="status_disconnected">模块框架未连接</string>
@@ -40,6 +40,9 @@
 
     <string name="setting_plex_surface_restore">Plex：回前台恢复画面</string>
     <string name="setting_plex_surface_restore_summary">针对：后台自动切到下一集后再回前台，有概率黑屏（有声无画）。回前台时强制重绑 Surface。偶发问题，需后台连播切集后再回前台验证。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
+
+    <string name="setting_plex_prevent_restart">Plex：防止息屏/回前台后从头播放</string>
+    <string name="setting_plex_prevent_restart_summary">针对：点控件回前台或息屏后进度被重置，以及回后台后控件卡住无法续播。开启后软化拉起 Intent、忽略系统注入返回键；在确认离开画中画并真正进后台（onStop）时卸掉 Video Surface，避免 HEVC 解码 ERROR，点播放时可尝试恢复。HyperOS 自动进画中画时不会在 onPause 误卸画面。可与其他 Plex 开关叠加。仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
 
     <string name="setting_emby_js_bridge">片尾 JS 桥接</string>
     <string name="setting_emby_js_bridge_summary">针对：Emby 及改包名兼容客户端能播完当前集，但后台仍无法自动下一集。把片尾 ended 送达 WebView，并在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。开启会请求加入作用域，同意后请强停目标应用再测。</string>

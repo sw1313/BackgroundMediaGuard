@@ -91,6 +91,14 @@ class TargetResolver(
             Settings.DEFAULT_PLEX_SURFACE_RESTORE,
         )
 
+    fun plexPreventRestart(packageName: String, uid: Int): Boolean =
+        plexFeature(
+            packageName,
+            uid,
+            Settings.KEY_PLEX_PREVENT_RESTART,
+            Settings.DEFAULT_PLEX_PREVENT_RESTART,
+        )
+
     private fun plexFeature(
         packageName: String,
         uid: Int,

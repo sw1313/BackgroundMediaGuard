@@ -6,8 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadata
+import android.app.Activity
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -19,6 +21,7 @@ import java.lang.reflect.Modifier
  * - PiP dismiss keep playing
  * - Media notification (timeline + bring-to-front)
  * - Surface restore after background auto-next
+ * - Prevent restart-from-beginning (soft Intent + swallow synthetic BACK)
  */
 class PlexCompatHook(
     private val module: ModuleEntry,
@@ -26,6 +29,7 @@ class PlexCompatHook(
     private val pipKeepPlaying: Boolean,
     private val mediaNotificationFix: Boolean,
     private val surfaceRestore: Boolean,
+    private val preventRestart: Boolean,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -48,6 +52,10 @@ class PlexCompatHook(
     @Volatile
     private var loggedProgressBypass = false
 
+    /** 最近一次可信播放进度；后台恢复时用。 */
+    @Volatile
+    private var savedPositionMs = 0L
+
     fun install(classLoader: ClassLoader) {
         var installed = 0
         if (pipKeepPlaying) {
@@ -56,16 +64,24 @@ class PlexCompatHook(
         if (mediaNotificationFix) {
             installed += installNotificationBringToFront(classLoader)
             installed += installSessionPlayerProgress(classLoader)
+        } else if (preventRestart) {
+            // 无通知修复时仍需软化拉起 Intent，避免点控件/系统回前台 CLEAR_TOP 重挂载。
+            installed += installBringToFrontIntentRewrite(classLoader)
         }
         if (surfaceRestore) {
             installed += installSurfaceRestore(classLoader)
+        }
+        if (preventRestart) {
+            installed += installEngineRemember(classLoader)
+            installed += installPreventRestart(classLoader)
         }
         if (installed == 0) {
             error("未安装任何 Plex 兼容 Hook")
         }
         module.info(
             "已为 $packageName 安装 Plex 兼容修复：hooks=$installed " +
-                "(pip=$pipKeepPlaying, notification=$mediaNotificationFix, surface=$surfaceRestore)",
+                "(pip=$pipKeepPlaying, notification=$mediaNotificationFix, " +
+                "surface=$surfaceRestore, preventRestart=$preventRestart)",
         )
     }
 
@@ -135,7 +151,37 @@ class PlexCompatHook(
 
         // 实测：Plex MediaStyle 通知 contentIntent=null 且 showChronometer=true → 显示 0:00、无法点回前台。
         count += hookNotificationManagerNotify()
+        count += installBringToFrontIntentRewrite(classLoader)
 
+        // 补 session metadata 时长，否则系统媒体面板可能没有可拖动进度条。
+        runCatching {
+            val method = MediaMetadata.Builder::class.java.getDeclaredMethod(
+                "putLong",
+                String::class.java,
+                Long::class.javaPrimitiveType,
+            )
+            module.hook(method).intercept { chain ->
+                val key = chain.args[0] as? String
+                val value = chain.args[1] as? Long ?: 0L
+                if (key == MediaMetadata.METADATA_KEY_DURATION && value <= 0L) {
+                    val live = firstLong(resolveExoPlayer(null), "getDuration")
+                    if (live != null && live > 0L) {
+                        module.info("Plex：补全 MediaMetadata.DURATION=$live")
+                        return@intercept chain.proceed(arrayOf(key, live))
+                    }
+                }
+                chain.proceed()
+            }
+            count++
+        }.onFailure {
+            module.warn("Plex MediaMetadata.DURATION Hook 失败: ${it.message}")
+        }
+
+        return count
+    }
+
+    private fun installBringToFrontIntentRewrite(classLoader: ClassLoader): Int {
+        var count = 0
         val getActivity = runCatching {
             PendingIntent::class.java.getDeclaredMethod(
                 "getActivity",
@@ -173,8 +219,9 @@ class PlexCompatHook(
             module.hook(method).intercept { chain ->
                 val pkg = chain.args[0] as? String
                 if (pkg == packageName) {
-                    module.info("Plex：替换 getLaunchIntentForPackage 为回前台 Intent")
-                    buildBringToFrontIntent(packageName)
+                    // 只软化 flags，保留系统原始 MAIN/LAUNCHER，避免全局换成自定义 Intent 引发副作用。
+                    val original = chain.proceed() as? Intent
+                    sanitizeBringToFrontFlags(original) ?: buildBringToFrontIntent(packageName)
                 } else {
                     chain.proceed()
                 }
@@ -183,32 +230,242 @@ class PlexCompatHook(
         }.onFailure {
             module.warn("Plex getLaunchIntentForPackage Hook 失败: ${it.message}")
         }
+        return count
+    }
 
-        // 补 session metadata 时长，否则系统媒体面板可能没有可拖动进度条。
-        runCatching {
-            val method = MediaMetadata.Builder::class.java.getDeclaredMethod(
-                "putLong",
-                String::class.java,
-                Long::class.javaPrimitiveType,
-            )
-            module.hook(method).intercept { chain ->
-                val key = chain.args[0] as? String
-                val value = chain.args[1] as? Long ?: 0L
-                if (key == MediaMetadata.METADATA_KEY_DURATION && value <= 0L) {
-                    val live = firstLong(resolveExoPlayer(null), "getDuration")
-                    if (live != null && live > 0L) {
-                        module.info("Plex：补全 MediaMetadata.DURATION=$live")
-                        return@intercept chain.proceed(arrayOf(key, live))
+    /**
+     * 防止「从头开始播放」/后台卡死：
+     * - 软化拉起 Intent（见 [buildBringToFrontIntent] / launchIntent flags）
+     * - 忽略系统注入 BACK
+     * - 回后台时主动清空 Video Surface，避免 MediaCodecVideoRenderer ERROR 导致控件无法续播
+     * - 点播放时若播放器已 ERROR，尝试恢复
+     */
+    private fun installPreventRestart(classLoader: ClassLoader): Int {
+        var count = 0
+        val activityClass = runCatching {
+            Class.forName("tv.plex.app.MainActivity", false, classLoader)
+        }.getOrNull()
+        if (activityClass == null) {
+            module.warn("Plex preventRestart：未找到 MainActivity")
+            return 0
+        }
+
+        activityClass.declaredMethods
+            .filter {
+                it.name == "dispatchKeyEvent" &&
+                    it.parameterCount == 1 &&
+                    KeyEvent::class.java.isAssignableFrom(it.parameterTypes[0])
+            }
+            .forEach { method ->
+                runCatching {
+                    method.isAccessible = true
+                    module.hook(method).intercept { chain ->
+                        val event = chain.args[0] as? KeyEvent
+                        if (event != null && shouldSwallowSyntheticBack(event)) {
+                            rememberPosition("synthetic-back")
+                            module.info(
+                                "Plex：忽略系统注入 BACK (action=${event.action}, deviceId=${event.deviceId})",
+                            )
+                            true
+                        } else {
+                            chain.proceed()
+                        }
                     }
+                    count++
+                }.onFailure {
+                    module.warn("Plex dispatchKeyEvent Hook 失败: ${it.message}")
+                }
+            }
+
+        // 仅在真正进后台时卸 Surface。不要在 onPause 动手：HyperOS 回桌常先 onPause 再进 PiP，
+        // 此时 isInPictureInPictureMode 仍为 false，过早卸 Surface 会把 PiP/解码打成 ERROR。
+        runCatching {
+            val stop = Activity::class.java.getDeclaredMethod("onStop")
+            stop.isAccessible = true
+            module.hook(stop).intercept { chain ->
+                val activity = chain.thisObject as? Activity
+                if (activity != null &&
+                    activity.javaClass.name == "tv.plex.app.MainActivity" &&
+                    !activity.isInPictureInPictureMode
+                ) {
+                    detachSurfaceForBackground("onStop")
                 }
                 chain.proceed()
             }
             count++
         }.onFailure {
-            module.warn("Plex MediaMetadata.DURATION Hook 失败: ${it.message}")
+            module.warn("Plex onStop surface Hook 失败: ${it.message}")
         }
 
+        count += installPlayRecovery(classLoader)
         return count
+    }
+
+    private fun installEngineRemember(classLoader: ClassLoader): Int {
+        var count = 0
+        val emClass = runCatching {
+            Class.forName("tv.plex.video.react.EngineManager", false, classLoader)
+        }.getOrNull() ?: return 0
+        emClass.declaredConstructors.forEach { ctor ->
+            runCatching {
+                ctor.isAccessible = true
+                module.hook(ctor).intercept { chain ->
+                    val result = chain.proceed()
+                    rememberEngineManager(chain.thisObject)
+                    result
+                }
+                count++
+            }
+        }
+        return count
+    }
+
+    private fun installPlayRecovery(classLoader: ClassLoader): Int {
+        var count = 0
+        val eventsClass = runCatching {
+            Class.forName("tv.plex.video.react.VideoEvents", false, classLoader)
+        }.getOrNull() ?: return 0
+        eventsClass.declaredMethods
+            .filter { it.name == "sendPlayCommand" && it.parameterCount == 0 }
+            .forEach { method ->
+                runCatching {
+                    method.isAccessible = true
+                    module.hook(method).intercept { chain ->
+                        val result = chain.proceed()
+                        mainHandler.post { recoverPlaybackIfNeeded("play-command") }
+                        result
+                    }
+                    count++
+                }.onFailure {
+                    module.warn("Plex sendPlayCommand recovery Hook 失败: ${it.message}")
+                }
+            }
+        return count
+    }
+
+    private fun sanitizeBringToFrontFlags(intent: Intent?): Intent? {
+        intent ?: return null
+        val dangerous =
+            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+        intent.flags = (intent.flags and dangerous.inv()) or
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        return intent
+    }
+
+    private fun shouldSwallowSyntheticBack(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BACK) return false
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
+        if (event.deviceId >= 0) return false
+        return isPlaybackActive()
+    }
+
+    private fun isPlaybackActive(): Boolean {
+        val exo = resolveExoPlayer(null) ?: return false
+        val playing = callBoolean(exo, "isPlaying") == true
+        val playWhenReady = callBoolean(exo, "getPlayWhenReady") == true
+        return playing || playWhenReady
+    }
+
+    private fun rememberPosition(reason: String) {
+        val live = firstLong(resolveExoPlayer(null), "C1", "getCurrentPosition", "c1", "getContentPosition")
+        if (live != null && live > 1000L) {
+            savedPositionMs = live
+            module.info("Plex：记住进度 ${savedPositionMs}ms（$reason）")
+        }
+    }
+
+    private fun detachSurfaceForBackground(reason: String) {
+        val exo = resolveExoPlayer(null) ?: return
+        if (!isPlaybackActive()) return
+        rememberPosition(reason)
+        if (!clearVideoSurface(exo)) return
+        // 保持「想播放」，只去掉失效画面，音频继续。
+        runCatching {
+            exo.javaClass.methods
+                .firstOrNull {
+                    it.name == "setPlayWhenReady" &&
+                        it.parameterCount == 1 &&
+                        it.parameterTypes[0] == Boolean::class.javaPrimitiveType
+                }
+                ?.invoke(exo, true)
+            exo.javaClass.methods
+                .firstOrNull { it.name == "play" && it.parameterCount == 0 }
+                ?.invoke(exo)
+        }
+        module.info("Plex：后台已卸 Surface，保持音频（$reason）")
+    }
+
+    private fun clearVideoSurface(exo: Any): Boolean {
+        val byHolder = runCatching {
+            val method = exo.javaClass.methods.firstOrNull {
+                it.parameterCount == 1 && it.parameterTypes[0] == SurfaceHolder::class.java
+            } ?: return@runCatching false
+            method.isAccessible = true
+            method.invoke(exo, null)
+            true
+        }.getOrDefault(false)
+        if (byHolder) return true
+        return runCatching {
+            val method = exo.javaClass.methods.firstOrNull {
+                it.name.contains("VideoSurface", ignoreCase = true) &&
+                    it.parameterCount == 1 &&
+                    it.parameterTypes[0] == android.view.Surface::class.java
+            } ?: return false
+            method.isAccessible = true
+            method.invoke(exo, null)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun recoverPlaybackIfNeeded(reason: String) {
+        val exo = resolveExoPlayer(null) ?: return
+        val error = runCatching {
+            exo.javaClass.methods
+                .firstOrNull { it.name == "getPlayerError" && it.parameterCount == 0 }
+                ?.invoke(exo)
+        }.getOrNull()
+        val playing = callBoolean(exo, "isPlaying") == true
+        if (error == null && playing) return
+
+        val pos = savedPositionMs.takeIf { it > 1000L }
+            ?: firstLong(exo, "C1", "getCurrentPosition", "c1", "getContentPosition")
+            ?: 0L
+        module.info(
+            "Plex：恢复播放（$reason, error=${error != null}, pos=$pos）",
+        )
+        // 后台恢复时不要绑失效 Surface。
+        clearVideoSurface(exo)
+        runCatching {
+            if (pos > 0L) {
+                exo.javaClass.methods
+                    .firstOrNull {
+                        it.name == "seekTo" &&
+                            it.parameterCount == 1 &&
+                            it.parameterTypes[0] == Long::class.javaPrimitiveType
+                    }
+                    ?.invoke(exo, pos)
+            }
+            exo.javaClass.methods
+                .firstOrNull { it.name == "prepare" && it.parameterCount == 0 }
+                ?.invoke(exo)
+            exo.javaClass.methods
+                .firstOrNull {
+                    it.name == "setPlayWhenReady" &&
+                        it.parameterCount == 1 &&
+                        it.parameterTypes[0] == Boolean::class.javaPrimitiveType
+                }
+                ?.invoke(exo, true)
+            exo.javaClass.methods
+                .firstOrNull { it.name == "play" && it.parameterCount == 0 }
+                ?.invoke(exo)
+        }.onFailure {
+            module.warn("Plex：恢复播放失败: ${it.message}")
+        }
     }
 
     private fun hookNotificationManagerNotify(): Int {
@@ -526,6 +783,9 @@ class PlexCompatHook(
                         if (value != null && value >= 0L &&
                             (method.name != "getDuration" || value > 0L)
                         ) {
+                            if (method.name != "getDuration" && value > 1000L) {
+                                savedPositionMs = value
+                            }
                             if (!loggedProgressBypass) {
                                 loggedProgressBypass = true
                                 module.info("Plex：进度/时长改为直读 ExoPlayer（${method.name}=$value）")
@@ -552,7 +812,8 @@ class PlexCompatHook(
                     method.isAccessible = true
                     module.hook(method).intercept { chain ->
                         val exo = resolveExoPlayer(chain.thisObject)
-                        val playing = firstBoolean(exo, "isPlaying", "C0", "i1")
+                        // 只读 ExoPlayer.isPlaying；勿把适配器混淆名 C0/i1 套到 exo 上。
+                        val playing = callBoolean(exo, "isPlaying")
                         if (playing != null) playing else chain.proceed()
                     }
                     hooked = true
@@ -664,17 +925,13 @@ class PlexCompatHook(
     }
 
     private fun buildBringToFrontIntent(pkg: String): Intent {
-        return Intent(Intent.ACTION_MAIN).apply {
+        // 不用 ACTION_MAIN + CATEGORY_LAUNCHER，降低被当成「重新启动任务」的概率。
+        return Intent().apply {
             setClassName(pkg, "tv.plex.app.MainActivity")
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            // MainActivity 为 singleTask；组合这些 flags 才能从媒体控件可靠回前台。
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
-                    Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT,
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
             )
             putExtra("background_media_guard_bring_to_front", true)
         }

@@ -102,7 +102,8 @@ class ModuleEntry : XposedModule() {
         val plexPip = resolver.plexPipKeepPlaying(packageName, uid)
         val plexNotification = resolver.plexMediaNotificationFix(packageName, uid)
         val plexSurface = resolver.plexSurfaceRestore(packageName, uid)
-        if (plexPip || plexNotification || plexSurface) {
+        val plexPreventRestart = resolver.plexPreventRestart(packageName, uid)
+        if (plexPip || plexNotification || plexSurface || plexPreventRestart) {
             installSafely("Plex 兼容修复") {
                 PlexCompatHook(
                     this,
@@ -110,6 +111,7 @@ class ModuleEntry : XposedModule() {
                     pipKeepPlaying = plexPip,
                     mediaNotificationFix = plexNotification,
                     surfaceRestore = plexSurface,
+                    preventRestart = plexPreventRestart,
                 ).install(param.classLoader)
             }
         }

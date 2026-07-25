@@ -29,6 +29,7 @@ class AppSettingsActivity : AppCompatActivity() {
     private lateinit var plexPipKeepPlaying: MaterialSwitch
     private lateinit var plexMediaNotification: MaterialSwitch
     private lateinit var plexSurfaceRestore: MaterialSwitch
+    private lateinit var plexPreventRestart: MaterialSwitch
     private lateinit var grace: AutoCompleteTextView
 
     private var loading = false
@@ -65,6 +66,7 @@ class AppSettingsActivity : AppCompatActivity() {
         plexPipKeepPlaying = findViewById(R.id.plex_pip_keep_playing)
         plexMediaNotification = findViewById(R.id.plex_media_notification)
         plexSurfaceRestore = findViewById(R.id.plex_surface_restore)
+        plexPreventRestart = findViewById(R.id.plex_prevent_restart)
         grace = findViewById(R.id.grace)
         grace.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, graceLabels),
@@ -123,6 +125,7 @@ class AppSettingsActivity : AppCompatActivity() {
         bindPlexSwitch(plexPipKeepPlaying, Settings.KEY_PLEX_PIP_KEEP_PLAYING)
         bindPlexSwitch(plexMediaNotification, Settings.KEY_PLEX_MEDIA_NOTIFICATION)
         bindPlexSwitch(plexSurfaceRestore, Settings.KEY_PLEX_SURFACE_RESTORE)
+        bindPlexSwitch(plexPreventRestart, Settings.KEY_PLEX_PREVENT_RESTART)
         grace.setOnItemClickListener { _, _, position, _ ->
             if (!loading) {
                 editPrefs {
@@ -202,7 +205,12 @@ class AppSettingsActivity : AppCompatActivity() {
             jsBridge,
         )
         if (Settings.isPlexPackage(targetPackage)) {
-            controls += listOf(plexPipKeepPlaying, plexMediaNotification, plexSurfaceRestore)
+            controls += listOf(
+                plexPipKeepPlaying,
+                plexMediaNotification,
+                plexSurfaceRestore,
+                plexPreventRestart,
+            )
         }
         controls.forEach { it.isEnabled = value != null }
         grace.isEnabled = value != null
@@ -257,6 +265,11 @@ class AppSettingsActivity : AppCompatActivity() {
                 prefs,
                 Settings.KEY_PLEX_SURFACE_RESTORE,
                 Settings.DEFAULT_PLEX_SURFACE_RESTORE,
+            )
+            plexPreventRestart.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_PLEX_PREVENT_RESTART,
+                Settings.DEFAULT_PLEX_PREVENT_RESTART,
             )
         }
         val graceSeconds = appInt(
