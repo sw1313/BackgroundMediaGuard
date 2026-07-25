@@ -6,7 +6,7 @@
 面向 **LSPosed / 现代 libxposed API 101–102** 的 Xposed 模块。  
 在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**、**自动切集**相关保护，以及官方 **Plex** 的若干客户端兼容修复；不是全局关闭系统省电策略。
 
-当前版本：**1.4.6**  
+当前版本：**1.4.16**  
 下载：[Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest)
 
 ---
@@ -24,8 +24,7 @@
 | Plex 关画中画后停播、控件消失 | 退出 PiP 时误发 `Stop` |
 | Plex 后台控件显示 0:00 / 无进度条 / 点不回前台 | 媒体通知误开 chronometer，且 `contentIntent` 为空 |
 | Plex 切下一集后回前台偶发黑屏（有声无画） | Surface 未可靠重绑 |
-| Plex 点控件回前台 / 息屏后从头播 | 激进 Intent 导致 React 重挂载，或系统注入 BACK 拆播放器 |
-| Plex 回后台后像暂停且控件无法续播 | 后台 Surface 失效触发 `MediaCodecVideoRenderer` ERROR（常见于 HEVC） |
+| Plex 点控件回前台 / 息屏后从头播或停在暂停 | 激进 Intent 重挂载、系统注入 BACK，或回前台未走引擎 resume |
 
 本模块按应用开启保护，尽量只在「正在播 / 刚切集」的窗口内介入。  
 **Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播等问题，用齿轮里的 **Plex 兼容修复**（四个独立开关）按需开启即可。
@@ -58,8 +57,8 @@
   |------|----------|----------|
   | 关闭画中画后继续后台播放 | 关 PiP 停播、控件消失 | 退出 PiP 时跳过误发的 `Stop` |
   | 修复后台播放控件 | 0:00 / 无进度条 / 点不回前台 | 关 chronometer、补 `contentIntent` / 时长、软化拉起 Intent |
-  | 回前台恢复画面 | 切集后回前台偶发黑屏 | 回前台强制重绑 Surface |
-  | 防止息屏/回前台后从头播放 | 回前台/息屏从头播，或回后台控件卡死 | 软 Intent、忽略系统注入 BACK；非 PiP 的 `onStop` 卸 Video Surface；点播放尝试恢复 |
+  | 回前台恢复画面 | 切集后回前台偶发黑屏（有声无画） | `attachView` 后轻量重绑 Surface |
+  | 防止息屏/回前台后从头播放 | 息屏后进度被拉回开头，或回前台有画不播 | 记进度 + 短窗拦误 seek→0；回前台走引擎原生 `H0()`/`play()`（不禁视频轨、不主动卸 Surface） |
 
 ### 配置方式
 
@@ -123,9 +122,9 @@
      - 关画中画会停 →「关闭画中画后继续后台播放」
      - 控件 0:00 / 点不回前台 →「修复后台播放控件」
      - 切集后回前台黑屏 →「回前台恢复画面」
-     - 回前台/息屏从头播，或回后台后控件无法续播 →「防止息屏/回前台后从头播放」
+     - 息屏后从头播 / 回前台不续播 →「防止息屏/回前台后从头播放」
   3. 同意作用域弹窗后**强停 Plex**，再按对应场景验证。
-  4. HyperOS 回桌面常会自动进画中画；「防从头播」只会在**确认非 PiP 且真正 `onStop`** 时卸 Surface，避免进 PiP 前误伤画面。
+  4. 画中画场景建议同时开「关闭画中画后继续后台播放」；「防从头播」自 1.4.16 起为精简策略，不再禁视频轨。
 
 ---
 
@@ -143,8 +142,8 @@
 | 片尾 JS 桥接 | 官方 Emby 默认开 | Emby/改包兼容客户端的片尾连播 |
 | Plex：关闭画中画后继续后台播放 | 遇该问题再开 | 关 PiP 误 Stop；仅官方 Plex |
 | Plex：修复后台播放控件 | 遇该问题再开 | 0:00/无进度条/点不回前台；仅官方 Plex |
-| Plex：回前台恢复画面 | 遇该问题再开 | 切集后回前台偶发黑屏；仅官方 Plex |
-| Plex：防止息屏/回前台后从头播放 | 遇该问题再开 | 软 Intent + 忽略注入 BACK；非 PiP 后台卸 Surface/恢复播放；仅官方 Plex |
+| Plex：回前台恢复画面 | 遇该问题再开 | 切集后偶发黑屏，轻量重绑画面；仅官方 Plex |
+| Plex：防止息屏/回前台后从头播放 | 遇该问题再开 | 记进度、拦误 seek→0、回前台 `H0()` 续播；仅官方 Plex |
 | 保护宽限期 | 120s+ | 切集间隙防降权 |
 
 ---
@@ -168,10 +167,10 @@ adb shell dumpsys audio
   - `Plex 兼容修复`
   - `跳过 Stop`
   - `已修补媒体通知` / `重写 session/通知拉起 Intent`
-  - `重绑播放画面`
+  - `重绑播放画面`（「回前台恢复画面」）
+  - `记住进度` / `拦截 Exo seek` / `回前台续播`（「防从头播」）
   - `忽略系统注入 BACK`
-  - `后台已卸 Surface` / `恢复播放`
-- `dumpsys media_session` 中 Plex 会话宜为 `PLAYING` / `PAUSED`，而不是长期卡在带 `MediaCodecVideoRenderer error` 的 `ERROR`。
+- `dumpsys media_session` 中 Plex 会话宜为 `PLAYING` / `PAUSED`，而不是长期卡在 `ERROR`。
 
 Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，以实际听感与 `dumpsys` 为准。
 
@@ -179,14 +178,17 @@ Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，
 
 ## 更新说明
 
+### 1.4.16
+
+- **大幅精简 Plex「防从头播」**：删除禁视频轨、吞解码 ERROR、watchdog、多层 recover/prepare。
+- 息屏只记住进度；短保护窗内拦截底层误 `seek→0`；回前台走 `of.k.H0()`（与 `EngineManager.resume` 同源）+ `play()`。
+- 画面交给 Plex 自己的 `surfaceCreated`；「回前台恢复画面」仍仅做轻量重绑。
+- 更新 README / 开关说明文案。
+
 ### 1.4.6
 
-- 新增 Plex 独立开关：**防止息屏/回前台后从头播放**。
-- 软化回前台 Intent（避免 `CLEAR_TOP` / `RESET_TASK_IF_NEEDED` 等导致 React 重挂载从头播）。
-- 忽略系统注入的 BACK（`deviceId=-1`），减轻息屏/PiP 场景拆播放器后重建。
-- 在确认**非画中画**的 `onStop` 卸掉 Video Surface，降低 HEVC 解码 ERROR、控件无法续播的概率；点播放时尝试恢复。
-- 修正 HyperOS「回桌面先 `onPause` 再进 PiP」时过早卸 Surface 的误伤。
-- 更新应用内文案与本 README。
+- 新增 Plex 独立开关：**防止息屏/回前台后从头播放**（后续版本多次迭代，以 1.4.16 精简策略为准）。
+- 软化回前台 Intent；忽略系统注入 BACK。
 
 ### 1.4.2
 
