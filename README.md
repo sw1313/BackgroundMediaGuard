@@ -1,11 +1,13 @@
 # 后台媒体守护（Background Media Guard）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sw1313/BackgroundMediaGuard)](https://github.com/sw1313/BackgroundMediaGuard/releases/latest)
 
 面向 **LSPosed / 现代 libxposed API 101–102** 的 Xposed 模块。  
-在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**与**自动切集**相关保护，而不是全局关闭系统省电策略。
+在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**、**自动切集**相关保护，以及官方 **Plex** 的若干客户端兼容修复；不是全局关闭系统省电策略。
 
-当前版本：**1.4.6**
+当前版本：**1.4.6**  
+下载：[Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest)
 
 ---
 
@@ -19,13 +21,14 @@
 | 后台播放中遇到约一分钟无声段后停止续播 | 澎湃 OS / HyperOS 零数据暂停 |
 | 进程还在，但播放卡住、通知消失 | 缓存冻结（Cached App Freezer）、OOM 降权 |
 | Emby 能播完当前集，后台却无法自动下一集 | WebView 控制层被暂停；或片尾后无法再次进入前台服务 |
-| Plex 关画中画后停播 | 退出 PiP 时误发 Stop（见「Plex 兼容修复」） |
+| Plex 关画中画后停播、控件消失 | 退出 PiP 时误发 `Stop` |
 | Plex 后台控件显示 0:00 / 无进度条 / 点不回前台 | 媒体通知误开 chronometer，且 `contentIntent` 为空 |
-| Plex 切下一集后回前台偶发黑屏 | Surface 未可靠重绑 |
-| Plex 点控件回前台 / 息屏后从头播 / 后台卡住 | 激进 Intent、系统注入 BACK，或后台 Surface 失效致解码 ERROR |
+| Plex 切下一集后回前台偶发黑屏（有声无画） | Surface 未可靠重绑 |
+| Plex 点控件回前台 / 息屏后从头播 | 激进 Intent 导致 React 重挂载，或系统注入 BACK 拆播放器 |
+| Plex 回后台后像暂停且控件无法续播 | 后台 Surface 失效触发 `MediaCodecVideoRenderer` ERROR（常见于 HEVC） |
 
 本模块按应用开启保护，尽量只在「正在播 / 刚切集」的窗口内介入。  
-**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。
+**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播等问题，用齿轮里的 **Plex 兼容修复**（四个独立开关）按需开启即可。
 
 ---
 
@@ -37,7 +40,7 @@
 - **MediaSession 跟踪**：关注 `PLAYING` / `BUFFERING` / `CONNECTING` 等状态；停止后仍有可配置的**保护宽限期**（默认 120 秒），方便切集、缓冲。
 - **媒体前台等效**：在保护窗口内把进程按媒体前台服务对待，并钳制内部进程状态与写给 LMKD 的 OOM adj。
 - **阻止缓存冻结**：媒体活动期间拦截 AOSP Cached App Freezer 对目标进程的冻结。
-- **后台前台服务（FGS）放行**：Android 12+ 限制后台 `startForeground()`。自动下一集时若需重新拉起 `MediaService` 一类前台服务，可在保护窗口内放行（对 Emby 等连播场景很关键）。
+- **后台前台服务（FGS）放行**：Android 12+ 限制后台 `startForeground()`。自动下一集时若需重新拉起 `MediaService` 一类前台服务，可在保护窗口内放行（对 Emby 等连播场景很重要）。
 - **共享 UID / 多进程**：尽量识别同 UID 与 Chrome 类隔离子进程。
 
 ### HyperOS（`com.miui.powerkeeper`）
@@ -49,17 +52,21 @@
 
 - **控制层后台可见性保持**（可选）：保持 WebView / React Native 控制层可调度。主要用于 **Emby** 等混合客户端；**Plex / Jellyfin 后台切集通常正常，一般不必开**。
 - **片尾 JS 桥接**（可选）：面向 Emby 及改包名兼容客户端，将片尾事件可靠送达页面脚本，配合系统侧 FGS 放行完成自动下一集。官方包名 `com.mb.android` **默认开启**，其他应用需在齿轮里手动打开。
-- **Plex 兼容修复**（仅官方 `com.plexapp.android` 齿轮可见，**默认关**，四个独立开关）：
-  1. **关闭画中画后继续后台播放** — 后台播时开画中画，直接关掉画中画会误发 Stop；开启后跳过该 Stop。
-  2. **修复后台播放控件** — 关掉错误的 chronometer（避免一直 0:00）、补通知 `contentIntent` / metadata 时长、修正拉起 `MainActivity` 的 Intent。
-  3. **回前台恢复画面** — 后台自动切下一集后回前台偶发黑屏（有声无画）时强制重绑 Surface。
-  4. **防止息屏/回前台后从头播放** — 软化回前台 Intent、忽略系统注入 BACK；真正进后台（非 PiP）时卸 Video Surface 防解码 ERROR，点播放可尝试恢复。
+- **Plex 兼容修复**（仅官方 `com.plexapp.android` 齿轮可见，**默认关**，**四个独立开关**）：
+
+  | 开关 | 针对现象 | 做法概要 |
+  |------|----------|----------|
+  | 关闭画中画后继续后台播放 | 关 PiP 停播、控件消失 | 退出 PiP 时跳过误发的 `Stop` |
+  | 修复后台播放控件 | 0:00 / 无进度条 / 点不回前台 | 关 chronometer、补 `contentIntent` / 时长、软化拉起 Intent |
+  | 回前台恢复画面 | 切集后回前台偶发黑屏 | 回前台强制重绑 Surface |
+  | 防止息屏/回前台后从头播放 | 回前台/息屏从头播，或回后台控件卡死 | 软 Intent、忽略系统注入 BACK；非 PiP 的 `onStop` 卸 Video Surface；点播放尝试恢复 |
 
 ### 配置方式
 
 - 主界面勾选要保护的应用。
 - 每个应用右侧**齿轮**进入单独设置，各项带场景说明。
-- 通过 **Remote Preferences** 实时下发到 system / PowerKeeper / 应用进程，改完一般无需重装模块（应用进程内 Hook 需强停目标应用后再生效）。
+- 通过 **Remote Preferences** 实时下发到 system / PowerKeeper / 应用进程；改完一般无需重装模块（**应用进程内 Hook 需强停目标应用后再生效**）。
+- **重启模块作用域**：可勾选要重启的进程。只改应用内开关时，勾选对应 App 即可；**system / PowerKeeper 在模块或系统侧逻辑未变时通常不必勾**。
 
 ---
 
@@ -88,11 +95,11 @@
 
 ### 2. 安装模块
 
-1. 安装 Release / Debug APK。
+1. 从 [Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest) 安装 APK。
 2. 在 LSPosed 中启用「后台媒体守护」。
 3. 作用域至少勾选 **`system`**；HyperOS 再勾选 **PowerKeeper**。
 4. 使用 Emby 连播或 Plex 兼容修复时，把对应应用也勾进作用域（或在齿轮里打开相关开关并同意弹窗）。
-5. 点「重启模块作用域」可**勾选**要重启的进程：只改应用内开关时，勾选对应 App 强停即可；**system / PowerKeeper 在模块或系统侧逻辑未变时通常不必勾**。刚启用模块、新加 system/PowerKeeper 作用域，或更新系统侧 Hook 后再勾它们。
+5. 需要时用「重启模块作用域」勾选进程；只改 Plex/Emby 应用内开关时，强停对应 App 通常即可。
 
 ### 3. 建议配置（以 Emby 后台连播为例）
 
@@ -110,7 +117,15 @@
 
 - **后台切集**：通常不依赖本模块的控制层 / JS 桥接。
 - **通用续播**：按需打开放行后台音频、零数据暂停、阻止冻结等系统侧开关即可。
-- **Plex 额外问题**：在 Plex 齿轮里按需打开「Plex 兼容修复」（可只开遇到的那几项），同意作用域后强停 Plex 再测。
+- **Plex 额外问题**（官方 `com.plexapp.android`）：
+  1. 主列表启用 Plex，打开齿轮。
+  2. **只打开你遇到的开关**（四个互相独立，默认全关）：
+     - 关画中画会停 →「关闭画中画后继续后台播放」
+     - 控件 0:00 / 点不回前台 →「修复后台播放控件」
+     - 切集后回前台黑屏 →「回前台恢复画面」
+     - 回前台/息屏从头播，或回后台后控件无法续播 →「防止息屏/回前台后从头播放」
+  3. 同意作用域弹窗后**强停 Plex**，再按对应场景验证。
+  4. HyperOS 回桌面常会自动进画中画；「防从头播」只会在**确认非 PiP 且真正 `onStop`** 时卸 Surface，避免进 PiP 前误伤画面。
 
 ---
 
@@ -139,7 +154,7 @@
 后台播放或切集时可用：
 
 ```shell
-adb logcat | grep -E "BackgroundMediaGuard|AudioHardening|freezing"
+adb logcat | grep -E "BackgroundMediaGuard|AudioHardening|freezing|Plex"
 adb shell dumpsys media_session
 adb shell dumpsys audio
 ```
@@ -149,20 +164,39 @@ adb shell dumpsys audio
 - 选中应用在媒体会话活跃时，不再因 AudioHardening 被真正静音。
 - 澎湃 OS / HyperOS 上，后台播放遇到无声段时不再被零数据策略误暂停续播。
 - Emby 片尾日志中可见 `sendJavaScript(ended)`，以及系统侧 `放行后台 startForeground`；会话应进入下一集并保持 `PLAYING`。
-- 开启 Plex 兼容修复后，日志中可见 `Plex 兼容修复` / `跳过 Stop` / `已修补媒体通知` / `重绑播放画面` / `后台已卸 Surface` / `恢复播放` 等字样。
+- 开启 Plex 兼容修复后，日志中可见例如：
+  - `Plex 兼容修复`
+  - `跳过 Stop`
+  - `已修补媒体通知` / `重写 session/通知拉起 Intent`
+  - `重绑播放画面`
+  - `忽略系统注入 BACK`
+  - `后台已卸 Surface` / `恢复播放`
+- `dumpsys media_session` 中 Plex 会话宜为 `PLAYING` / `PAUSED`，而不是长期卡在带 `MediaCodecVideoRenderer error` 的 `ERROR`。
 
 Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，以实际听感与 `dumpsys` 为准。
 
 ---
 
-## 更新说明（1.4.6）
+## 更新说明
 
-相对 1.4.2：
+### 1.4.6
 
-- 新增 Plex 独立开关：**防止息屏/回前台后从头播放**（软化拉起 Intent、忽略系统注入 BACK）。
-- 回后台时在确认**非画中画**的 `onStop` 卸掉 Video Surface，降低 HEVC `MediaCodecVideoRenderer` ERROR 导致控件无法续播的概率；点播放时尝试恢复。
-- 「修复后台播放控件」继续使用更温和的回前台 Intent（避免 `CLEAR_TOP` 等导致 React 重挂载从头播）。
-- 修正 HyperOS「回桌面先 onPause 再进 PiP」时过早卸 Surface 的误伤。
+- 新增 Plex 独立开关：**防止息屏/回前台后从头播放**。
+- 软化回前台 Intent（避免 `CLEAR_TOP` / `RESET_TASK_IF_NEEDED` 等导致 React 重挂载从头播）。
+- 忽略系统注入的 BACK（`deviceId=-1`），减轻息屏/PiP 场景拆播放器后重建。
+- 在确认**非画中画**的 `onStop` 卸掉 Video Surface，降低 HEVC 解码 ERROR、控件无法续播的概率；点播放时尝试恢复。
+- 修正 HyperOS「回桌面先 `onPause` 再进 PiP」时过早卸 Surface 的误伤。
+- 更新应用内文案与本 README。
+
+### 1.4.2
+
+- Plex：后台控件 chronometer / `contentIntent` / 进度与拉起 Intent 修复。
+- 「重启模块作用域」支持勾选要重启的进程（system / PowerKeeper / 各 App）。
+
+### 1.4.0 – 1.4.1
+
+- 拆分 Plex 三项兼容修复开关（关画中画继续播、修复后台控件、回前台恢复画面）。
+- 明确 Plex / Jellyfin 后台切集通常不必开控制层 / JS 桥接。
 
 ---
 
@@ -210,7 +244,7 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17..."
 
 - `app/.../xposed/ModuleEntry.kt` — 入口与 Hook 安装
 - `app/.../xposed/*Hook.kt` — 各保护逻辑（含 `PlexCompatHook`）
-- `app/.../ui/` — 主列表与按应用设置
+- `app/.../ui/` — 主列表、按应用设置、可勾选的作用域重启
 - `META-INF/xposed/` — 模块元数据与推荐作用域
 
 ---
@@ -220,7 +254,7 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17..."
 - 需要框架具备 system Hook 与 Remote Preferences 能力。
 - 依赖应用正确发布 **MediaSession**；没有会话的应用只能用「始终保护」，耗电更高。
 - HyperOS 保护依赖当前固件上的 PowerKeeper 实现；系统大版本升级后可能需要适配。
-- Plex 兼容修复依赖官方包名与当前版本内部实现；Plex 大版本更新后部分 Hook 可能需再适配。
+- Plex 兼容修复依赖官方包名与当前客户端内部实现；Plex 大版本更新后部分 Hook 可能需再适配。
 - OOM / 冻结保护只在媒体活动与宽限期内生效；极端内存压力下仍可能被杀。
 - 共享 UID 在系统层难以完全拆开，勾选一个包可能影响同 UID 其他包。
 - 放行后台音频会削弱系统「防止意外后台发声」的防护，请只对信任的媒体应用开启。
@@ -235,7 +269,7 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17..."
 | 最低 Android | API 26 |
 | 目标 Android | API 36 |
 | 框架 | libxposed API 101–102（如 LSPosed 2.1.x） |
-| 重点场景 | HyperOS / Android 12+ 后台媒体与自动切集 |
+| 重点场景 | HyperOS / Android 12+ 后台媒体与自动切集；官方 Plex 兼容修复 |
 
 已重点验证过的应用方向：Emby、Plex、Jellyfin、Chrome 类网页媒体（效果因站点实现而异）。
 
