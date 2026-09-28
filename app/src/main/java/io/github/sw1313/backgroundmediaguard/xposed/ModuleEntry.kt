@@ -56,6 +56,9 @@ class ModuleEntry : XposedModule() {
         installSafely("缓存冻结保护") {
             FreezerHook(this, resolver, registry).install(param.classLoader)
         }
+        installSafely("低内存保活界面") {
+            LowMemDestroyHook(this, resolver, registry).install(param.classLoader)
+        }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
@@ -115,6 +118,11 @@ class ModuleEntry : XposedModule() {
                     preventRestart = plexPreventRestart,
                     codecErrorGuard = plexCodecError,
                 ).install(param.classLoader)
+            }
+        }
+        if (resolver.jellyfinPlayerRestore(packageName, uid)) {
+            installSafely("Jellyfin 播放页恢复") {
+                JellyfinCompatHook(this, packageName).install(param.classLoader)
             }
         }
     }

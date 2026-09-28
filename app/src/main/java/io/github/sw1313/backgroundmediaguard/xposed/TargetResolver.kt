@@ -107,6 +107,20 @@ class TargetResolver(
             Settings.DEFAULT_PLEX_CODEC_ERROR_GUARD,
         )
 
+    fun isEnabledTarget(packageName: String): Boolean =
+        enabled && packageName in readTargets()
+
+    fun jellyfinPlayerRestore(packageName: String, uid: Int): Boolean =
+        enabled &&
+            Settings.isJellyfinPackage(packageName) &&
+            packageName in readTargets() &&
+            isSelectedUid(uid) &&
+            appBoolean(
+                packageName,
+                Settings.KEY_JELLYFIN_PLAYER_RESTORE,
+                Settings.DEFAULT_JELLYFIN_PLAYER_RESTORE,
+            )
+
     private fun plexFeature(
         packageName: String,
         uid: Int,

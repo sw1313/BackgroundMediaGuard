@@ -31,6 +31,8 @@ class AppSettingsActivity : AppCompatActivity() {
     private lateinit var plexSurfaceRestore: MaterialSwitch
     private lateinit var plexPreventRestart: MaterialSwitch
     private lateinit var plexCodecErrorGuard: MaterialSwitch
+    private lateinit var jellyfinSection: LinearLayout
+    private lateinit var jellyfinPlayerRestore: MaterialSwitch
     private lateinit var grace: AutoCompleteTextView
 
     private var loading = false
@@ -69,12 +71,16 @@ class AppSettingsActivity : AppCompatActivity() {
         plexSurfaceRestore = findViewById(R.id.plex_surface_restore)
         plexPreventRestart = findViewById(R.id.plex_prevent_restart)
         plexCodecErrorGuard = findViewById(R.id.plex_codec_error_guard)
+        jellyfinSection = findViewById(R.id.jellyfin_compat_section)
+        jellyfinPlayerRestore = findViewById(R.id.jellyfin_player_restore)
         grace = findViewById(R.id.grace)
         grace.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, graceLabels),
         )
         plexSection.visibility =
             if (Settings.isPlexPackage(targetPackage)) View.VISIBLE else View.GONE
+        jellyfinSection.visibility =
+            if (Settings.isJellyfinPackage(targetPackage)) View.VISIBLE else View.GONE
         wireUi()
     }
 
@@ -129,6 +135,7 @@ class AppSettingsActivity : AppCompatActivity() {
         bindPlexSwitch(plexSurfaceRestore, Settings.KEY_PLEX_SURFACE_RESTORE)
         bindPlexSwitch(plexPreventRestart, Settings.KEY_PLEX_PREVENT_RESTART)
         bindPlexSwitch(plexCodecErrorGuard, Settings.KEY_PLEX_CODEC_ERROR_GUARD)
+        bindPlexSwitch(jellyfinPlayerRestore, Settings.KEY_JELLYFIN_PLAYER_RESTORE)
         grace.setOnItemClickListener { _, _, position, _ ->
             if (!loading) {
                 editPrefs {
@@ -213,7 +220,11 @@ class AppSettingsActivity : AppCompatActivity() {
                 plexMediaNotification,
                 plexSurfaceRestore,
                 plexPreventRestart,
+                plexCodecErrorGuard,
             )
+        }
+        if (Settings.isJellyfinPackage(targetPackage)) {
+            controls += jellyfinPlayerRestore
         }
         controls.forEach { it.isEnabled = value != null }
         grace.isEnabled = value != null
@@ -279,6 +290,14 @@ class AppSettingsActivity : AppCompatActivity() {
                 Settings.KEY_PLEX_CODEC_ERROR_GUARD,
                 Settings.DEFAULT_PLEX_CODEC_ERROR_GUARD,
             )
+        }
+        if (Settings.isJellyfinPackage(targetPackage)) {
+            jellyfinPlayerRestore.isChecked = appBoolean(
+                prefs,
+                Settings.KEY_JELLYFIN_PLAYER_RESTORE,
+                Settings.DEFAULT_JELLYFIN_PLAYER_RESTORE,
+            )
+            if (jellyfinPlayerRestore.isChecked) requestAppScope()
         }
         val graceSeconds = appInt(
             prefs,

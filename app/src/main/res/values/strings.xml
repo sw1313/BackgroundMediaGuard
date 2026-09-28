@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">后台媒体守护</string>
-    <string name="module_description">为选中的媒体应用提供后台播放、切集保护，以及官方 Plex 兼容修复（画中画续播、控件、画面、防从头播、防 Error Occurred）</string>
-    <string name="app_subtitle">为选中的媒体应用提供后台播放与 Plex 兼容保护</string>
+    <string name="module_description">为选中的媒体应用提供后台播放、切集保护，官方 Plex 兼容修复，以及 Jellyfin 播放页恢复与耳机暂停</string>
+    <string name="app_subtitle">为选中的媒体应用提供后台播放、Plex 与 Jellyfin 兼容保护</string>
     <string name="status_connecting">正在连接框架</string>
     <string name="status_connected">模块框架已连接</string>
     <string name="status_disconnected">模块框架未连接</string>
@@ -46,6 +46,9 @@
 
     <string name="setting_plex_codec_error_guard">Plex：防止画中画/息屏 Error Occurred</string>
     <string name="setting_plex_codec_error_guard_summary">针对：画中画或息屏后弹出 Error Occurred（MediaCodecVideoRenderer / HEVC）。根因是 Surface 被系统拆掉时解码器仍在出帧，而 Plex 异步卸面过晚。开启后在 surfaceDestroyed 同步 clearVideoSurface，并吞掉「Detaching surface timed out」。不做 surfaceCreated 重绑（避免 PiP 小窗叠到全屏）。与「防从头播」「回前台恢复画面」独立；仅官方 Plex；同意作用域后请强停 Plex 再测。</string>
+
+    <string name="setting_jellyfin_player_restore">Jellyfin：后台只放音频，回前台接上画面</string>
+    <string name="setting_jellyfin_player_restore_summary">针对：后台播放一段时间后进度卡住，回前台也播不动。界面完全看不见时关掉同一个播放器的视频轨，只放音频；回到前台再打开视频轨，接着原来的进度。耳机 / 蓝牙断开时暂停。息屏后的 low-mem 拆界面和回前台时的 assetsPaths 重建由系统侧拦住，需要重启平板。仅官方 Jellyfin，默认开启。同意作用域后请强停 Jellyfin 再测。</string>
 
     <string name="setting_emby_js_bridge">片尾 JS 桥接</string>
     <string name="setting_emby_js_bridge_summary">针对：Emby 及改包名兼容客户端能播完当前集，但后台仍无法自动下一集。把片尾 ended 送达 WebView，并在保护窗口内放行后台 MediaService 的 startForeground。官方 Emby（com.mb.android）默认开启；其他应用需手动打开。开启会请求加入作用域，同意后请强停目标应用再测。</string>

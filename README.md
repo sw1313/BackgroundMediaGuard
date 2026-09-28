@@ -6,7 +6,7 @@
 面向 **LSPosed / 现代 libxposed API 101–102** 的 Xposed 模块。  
 在 Android 12+ 与 HyperOS 等系统上，为你选中的媒体应用提供**后台续播**、**自动切集**相关保护，以及官方 **Plex** 的若干客户端兼容修复；不是全局关闭系统省电策略。
 
-当前版本：**1.4.26**  
+当前版本：**1.4.32**  
 下载：[Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest)
 
 ---
@@ -28,7 +28,7 @@
 | Plex 画中画/息屏后 Error Occurred | Surface 拆卸过晚，HEVC 解码器进入 ERROR |
 
 本模块按应用开启保护，尽量只在「正在播 / 刚切集」的窗口内介入。  
-**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播 / Error Occurred 等问题，用齿轮里的 **Plex 兼容修复**（五个独立开关）按需开启即可。
+**Plex / Jellyfin 后台切集通常正常**，一般不必为切集去开「控制层」或「片尾 JS 桥接」。Plex 的画中画 / 控件 / 黑屏 / 从头播 / Error Occurred 等问题，用齿轮里的 **Plex 兼容修复**（五个独立开关）按需开启即可。Jellyfin 后台播放卡住、回前台播不动，或蓝牙耳机断开不停，用齿轮里的 **Jellyfin：后台只放音频，回前台接上画面**（默认开）。
 
 ---
 
@@ -81,9 +81,9 @@
 | `com.miui.powerkeeper` | 澎湃 OS / HyperOS 零数据暂停（小米机强烈建议） |
 | `com.mb.android` | Emby（控制层 / 片尾 JS 桥接） |
 | `com.plexapp.android` | Plex（画中画 / 通知控件 / 画面恢复 / 防从头播等兼容修复） |
-| `org.jellyfin.mobile` | Jellyfin（可选；一般只需系统侧保护，不必开控制层） |
+| `org.jellyfin.mobile` | Jellyfin（后台只放音频 / 耳机暂停需要；切集本身一般不必开控制层） |
 
-模块为 **非静态作用域**（`staticScope=false`）：可在 LSPosed 中手动勾选，也可在应用设置里打开控制层 / 片尾 JS 桥接 / Plex 兼容修复时由模块**动态请求**加入作用域。
+模块为 **非静态作用域**（`staticScope=false`）：可在 LSPosed 中手动勾选，也可在应用设置里打开控制层 / 片尾 JS 桥接 / Plex 兼容修复 / Jellyfin 后台只放音频时由模块**动态请求**加入作用域。
 
 ---
 
@@ -99,7 +99,7 @@
 1. 从 [Releases](https://github.com/sw1313/BackgroundMediaGuard/releases/latest) 安装 APK。
 2. 在 LSPosed 中启用「后台媒体守护」。
 3. 作用域至少勾选 **`system`**；HyperOS 再勾选 **PowerKeeper**。
-4. 使用 Emby 连播或 Plex 兼容修复时，把对应应用也勾进作用域（或在齿轮里打开相关开关并同意弹窗）。
+4. 使用 Emby 连播、Plex 兼容修复或 Jellyfin 后台只放音频时，把对应应用也勾进作用域（或在齿轮里打开相关开关并同意弹窗）。
 5. 需要时用「重启模块作用域」勾选进程；只改 Plex/Emby 应用内开关时，强停对应 App 通常即可。
 
 ### 3. 建议配置（以 Emby 后台连播为例）
@@ -128,6 +128,10 @@
      - 弹 Error Occurred（HEVC）→「防止画中画/息屏 Error Occurred」
   3. 同意作用域弹窗后**强停 Plex**，再按对应场景验证。
   4. 开关各管各的：防从头播≠Error Occurred≠恢复画面；异常缩放时先关「回前台恢复画面」并确认已装 ≥1.4.26。
+- **Jellyfin 后台只放音频 / 耳机暂停**（官方 `org.jellyfin.mobile`）：
+  1. 系统侧保护负责让进程和界面留着。这个开关负责后台关视频轨、回前台开视频轨，以及耳机暂停，默认开启。
+  2. 打开 Jellyfin 的齿轮，确认「后台只放音频，回前台接上画面」开着，并同意作用域。
+  3. **强停 Jellyfin** 后再测：后台音频一直走；从应用或通知回去仍是原来的播放器，画面接着进度播；断开蓝牙耳机应暂停。
 
 ---
 
@@ -148,6 +152,7 @@
 | Plex：回前台恢复画面 | 遇该问题再开 | 切集后偶发黑屏，轻量重绑画面；仅官方 Plex |
 | Plex：防止息屏/回前台后从头播放 | 遇该问题再开 | 软 Intent、记 startPosition、拦 seek→0、纠正重建进度（不拦返回键）；仅官方 Plex |
 | Plex：防止画中画/息屏 Error Occurred | 遇该问题再开 | surfaceDestroyed 同步卸面 + 吞拆面超时（不强制重绑）；仅官方 Plex |
+| Jellyfin：后台只放音频，回前台接上画面 | 默认开 | 看不见时关同一播放器的视频轨，回前台再打开；耳机/蓝牙断开直接暂停；仅官方 Jellyfin |
 | 保护宽限期 | 120s+ | 切集间隙防降权 |
 
 ---
@@ -174,6 +179,8 @@ adb shell dumpsys audio
   - `重绑播放画面`（「回前台恢复画面」）
   - `记下目标进度` / `纠正开播起始` / `拦截 Exo seek` / `纠正被重置的进度`（「防从头播」）
   - `已同步卸掉 Video Surface` / `吞掉 Surface 拆卸错误`（「防 Error Occurred」）
+  - `关掉视频轨，只放音频` / `回到前台，打开视频轨` / `耳机断开，已暂停播放`（Jellyfin）
+  - `已安装界面保活` / `跳过 low-mem 销毁` / `跳过 assetsPaths 重载`（息屏和回前台都留下原来的界面，需重启后才有）
 - `dumpsys media_session` 中 Plex 会话宜为 `PLAYING` / `PAUSED`，而不是长期卡在 `ERROR`。
 
 Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，以实际听感与 `dumpsys` 为准。
@@ -181,6 +188,16 @@ Android 16 的部分 `would be muted` 日志可能是预警而非真实拦截，
 ---
 
 ## 更新说明
+
+### 1.4.32
+
+相对 1.4.26 的主要变化：
+
+- 澎湃 OS / Android 17 上 OOM 保护改挂 `ProcessRecordInternal`。旧版找不到 `ProcessStateRecord` 就整段跳过，音频能留着，应用本身仍会被杀。
+- 正在播放或停止还不到 30 分钟时，跳过息屏后的 `low-mem` 拆界面，以及回前台时的 `assetsPaths` 配置重建。原来的界面和播放器留着。这两处在 system_server，安装后需要重启。
+- 官方 Jellyfin 新增开关（默认开）：**后台只放音频，回前台接上画面**。界面完全看不见时关掉同一个播放器的视频轨，只放音频；回到前台再打开，画面接着当前进度。不新建播放器。
+- 耳机或蓝牙断开时，按系统「音频即将变吵」暂停。
+- 中间迭代曾尝试记参数重开播放页、跳回进度、拦返回和保持前台服务，已去掉。
 
 ### 1.4.26
 

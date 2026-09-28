@@ -7,6 +7,7 @@ class MediaProtectionRegistry(
     private val nowMillis: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val sessions = ConcurrentHashMap<Any, Session>()
+    private val lastActiveByPackage = ConcurrentHashMap<String, Long>()
 
     fun update(
         session: Any,
@@ -15,6 +16,7 @@ class MediaProtectionRegistry(
         active: Boolean,
     ) {
         val now = nowMillis()
+        val wasActive = sessions[session]?.active == true
         sessions.compute(session) { _, old ->
             Session(
                 packageName = packageName,
@@ -27,6 +29,23 @@ class MediaProtectionRegistry(
                 },
             )
         }
+        if (packageName.isNotEmpty() && (active || wasActive)) {
+            lastActiveByPackage[packageName] = now
+        }
+    }
+
+    fun retainsActivity(packageName: String, recentMillis: Long): Boolean {
+        if (packageName.isEmpty()) return false
+        val now = nowMillis()
+        if (sessions.values.any { session ->
+                session.packageName == packageName &&
+                    (session.active || now - session.lastActiveAt <= recentMillis)
+            }
+        ) {
+            return true
+        }
+        val lastActiveAt = lastActiveByPackage[packageName] ?: return false
+        return now - lastActiveAt <= recentMillis
     }
 
     fun remove(session: Any) {

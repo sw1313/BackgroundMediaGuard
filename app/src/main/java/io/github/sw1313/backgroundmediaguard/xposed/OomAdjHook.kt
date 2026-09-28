@@ -8,19 +8,23 @@ class OomAdjHook(
     private val registry: MediaProtectionRegistry,
 ) {
     fun install(classLoader: ClassLoader) {
-        val internalCount = installProcessStateHooks(classLoader)
-        val lmkdCount = installLmkdHook(classLoader)
+        var internalCount = 0
+        var lmkdCount = 0
+        for (className in PROCESS_STATE_CLASSES) {
+            runCatching { internalCount += installProcessStateHooks(classLoader, className) }
+                .onFailure { module.warn("$className OOM Hook 跳过: ${it.message}") }
+        }
+        runCatching { lmkdCount = installLmkdHook(classLoader) }
+            .onFailure { module.warn("ProcessList.setOomAdj Hook 跳过: ${it.message}") }
+        if (internalCount == 0 && lmkdCount == 0) {
+            error("没有可用的 OOM adj 入口")
+        }
         module.info("已安装 OOM adj Hook：内部状态=$internalCount，LMKD=$lmkdCount")
     }
 
-    private fun installProcessStateHooks(classLoader: ClassLoader): Int {
-        val stateClass = Class.forName(
-            "com.android.server.am.ProcessStateRecord",
-            false,
-            classLoader,
-        )
+    private fun installProcessStateHooks(classLoader: ClassLoader, className: String): Int {
+        val stateClass = Class.forName(className, false, classLoader)
         val appField = findField(stateClass, "mApp")
-            ?: error("ProcessStateRecord.mApp 不存在")
         val methods = stateClass.declaredMethods.filter {
             it.name in setOf("setCurRawAdj", "setSetRawAdj", "setCurAdj", "setSetAdj") &&
                 it.parameterCount >= 1 &&
@@ -29,7 +33,11 @@ class OomAdjHook(
         methods.forEach { method ->
             method.isAccessible = true
             module.hook(method).intercept { chain ->
-                val process = runCatching { appField.get(chain.thisObject) }.getOrNull()
+                val process = if (appField != null) {
+                    runCatching { appField.get(chain.thisObject) }.getOrNull()
+                } else {
+                    chain.thisObject
+                }
                 val adj = chain.args[0] as Int
                 val adjusted = clampAdj(
                     adj,
@@ -93,6 +101,11 @@ class OomAdjHook(
 
     companion object {
         internal const val PERCEPTIBLE_APP_ADJ = 200
+
+        private val PROCESS_STATE_CLASSES = arrayOf(
+            "com.android.server.am.ProcessStateRecord",
+            "com.android.server.am.psc.ProcessRecordInternal",
+        )
 
         internal fun clampAdj(adj: Int, protected: Boolean): Int =
             if (protected) adj.coerceAtMost(PERCEPTIBLE_APP_ADJ) else adj

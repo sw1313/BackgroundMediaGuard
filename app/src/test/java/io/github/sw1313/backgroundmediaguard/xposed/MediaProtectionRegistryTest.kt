@@ -49,6 +49,28 @@ class MediaProtectionRegistryTest {
     }
 
     @Test
+    fun activityRetentionOutlivesShortGrace() {
+        registry.update("session", "org.jellyfin.mobile", 10522, active = true)
+        now += 10_000
+        registry.update("session", "org.jellyfin.mobile", 10522, active = false)
+        now += 200_000
+        assertFalse(registry.isProtected(setOf("org.jellyfin.mobile"), null, 120_000))
+        assertEquals(0, registry.sessionCount())
+
+        assertTrue(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
+        now += 30 * 60 * 1000L
+        assertFalse(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
+    }
+
+    @Test
+    fun assetsPathsBitIsStrippedFromRelaunchChanges() {
+        val assets = LowMemDestroyHook.CONFIG_ASSETS_PATHS
+        assertEquals(0, LowMemDestroyHook.changesWithoutAssetsPaths(assets))
+        assertEquals(0x80, LowMemDestroyHook.changesWithoutAssetsPaths(assets or 0x80))
+        assertEquals(0x80, LowMemDestroyHook.changesWithoutAssetsPaths(0x80))
+    }
+
+    @Test
     fun oomAdjIsClampedOnlyForProtectedProcess() {
         assertEquals(200, OomAdjHook.clampAdj(905, protected = true))
         assertEquals(100, OomAdjHook.clampAdj(100, protected = true))
