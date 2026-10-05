@@ -9,6 +9,9 @@ class MediaProtectionRegistry(
     private val sessions = ConcurrentHashMap<Any, Session>()
     private val lastActiveByPackage = ConcurrentHashMap<String, Long>()
 
+    /** 还没被 destroySession 的会话。暂停中也留着，不受宽限期清理。 */
+    private val liveSessions = ConcurrentHashMap<Any, String>()
+
     fun update(
         session: Any,
         packageName: String,
@@ -32,10 +35,14 @@ class MediaProtectionRegistry(
         if (packageName.isNotEmpty() && (active || wasActive)) {
             lastActiveByPackage[packageName] = now
         }
+        if (packageName.isNotEmpty() && (active || liveSessions.containsKey(session))) {
+            liveSessions[session] = packageName
+        }
     }
 
     fun retainsActivity(packageName: String, recentMillis: Long): Boolean {
         if (packageName.isEmpty()) return false
+        if (liveSessions.values.any { it == packageName }) return true
         val now = nowMillis()
         if (sessions.values.any { session ->
                 session.packageName == packageName &&
@@ -50,6 +57,7 @@ class MediaProtectionRegistry(
 
     fun remove(session: Any) {
         sessions.remove(session)
+        liveSessions.remove(session)
     }
 
     fun isProtected(

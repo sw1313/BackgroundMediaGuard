@@ -20,10 +20,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 进程和界面由系统侧保住。剩下的问题在播放器里：界面看不见时解码器被收走，
  * 视频样本塞满缓冲，音频拿不到数据，进度卡住。
  *
- * 做法：MainActivity 完全看不见时，用 Jellyfin 自己的
- * clearSelectionAndDisableRendererByType 关掉同一个播放器的视频轨，只放音频；
- * 回到前台把原来的轨道参数设回去。
- * 耳机 / 蓝牙断开（ACTION_AUDIO_BECOMING_NOISY）时暂停。
+ * MainActivity 完全看不见时，用 Jellyfin 自己的 clearSelectionAndDisableRendererByType
+ * 关掉视频类型；回到前台对当前轨道参数做反操作 setTrackTypeDisabled(视频, false)。
+ * 不碰播放、暂停、加载和页面切换。耳机 / 蓝牙断开时调用 Jellyfin 的 pause()。
  */
 class JellyfinCompatHook(
     private val module: ModuleEntry,
@@ -33,8 +32,8 @@ class JellyfinCompatHook(
 
     private var appClassLoader: ClassLoader? = null
 
-    /** 只在主线程读写。 */
-    private var hiddenVideo: HiddenVideo? = null
+    /** 被本模块关掉视频类型的轨道选择器。只在主线程读写。 */
+    private var hiddenSelector: WeakReference<Any>? = null
 
     private var staleFilesCleared = false
 
@@ -43,15 +42,6 @@ class JellyfinCompatHook(
 
     @Volatile
     private var lastPauseElapsed = 0L
-
-    private class HiddenVideo(
-        val viewModel: WeakReference<Any>,
-        val selector: WeakReference<Any>,
-        val parametersField: Field,
-        val original: Any,
-        val hidden: Any,
-        val setters: List<Method>,
-    )
 
     fun install(classLoader: ClassLoader) {
         appClassLoader = classLoader
@@ -125,69 +115,113 @@ class JellyfinCompatHook(
     }
 
     private fun hideVideo() {
-        if (hiddenVideo != null) return
+        if (hiddenSelector?.get() != null) return
         val viewModel = liveViewModel() ?: return
         val selector = readField(viewModel, "trackSelector") ?: return
         val disable = trackUtilsMethod("clearSelectionAndDisableRendererByType") ?: run {
             module.warn("Jellyfin：找不到 clearSelectionAndDisableRendererByType")
             return
         }
-        val fields = instanceFields(selector.javaClass)
-        val before = fields.associateWith { it.get(selector) }
-        val setters = before.mapNotNull { (field, value) ->
-            value ?: return@mapNotNull null
-            findSetters(selector.javaClass, value.javaClass)
-                .takeIf { it.isNotEmpty() }
-                ?.let { field to it }
-        }.toMap()
-        if (setters.isEmpty()) {
-            module.warn("Jellyfin：找不到轨道参数的设置方法，不关视频轨")
+        if (parametersField(selector) == null) {
+            module.warn("Jellyfin：认不出轨道参数，不关视频轨")
             return
         }
-
         disable.invoke(null, selector, TRACK_TYPE_VIDEO)
-
-        val changed = setters.keys.firstOrNull { field ->
-            val old = before[field]
-            val now = field.get(selector)
-            now != null && now !== old && now.javaClass == old?.javaClass
-        }
-        if (changed == null) {
-            module.warn("Jellyfin：关视频轨后没找到变化的轨道参数")
-            return
-        }
-        hiddenVideo = HiddenVideo(
-            viewModel = WeakReference(viewModel),
-            selector = WeakReference(selector),
-            parametersField = changed,
-            original = before.getValue(changed)!!,
-            hidden = changed.get(selector)!!,
-            setters = setters.getValue(changed),
-        )
+        hiddenSelector = WeakReference(selector)
         module.info("Jellyfin：界面不可见，关掉视频轨，只放音频")
     }
 
     private fun showVideo() {
-        val hidden = hiddenVideo ?: return
-        hiddenVideo = null
-        val selector = hidden.selector.get() ?: return
-        val changedMeanwhile = hidden.parametersField.get(selector) !== hidden.hidden
-        val restored = hidden.setters.any { setter ->
-            runCatching { setter.invoke(selector, hidden.original) }
-            hidden.parametersField.get(selector) === hidden.original
-        }
-        if (!restored) {
-            module.warn("Jellyfin：设回轨道参数失败，视频轨可能没打开")
+        val selector = hiddenSelector?.get() ?: return
+        hiddenSelector = null
+        val field = parametersField(selector) ?: run {
+            module.warn("Jellyfin：认不出轨道参数，视频轨没打开")
             return
         }
-        if (changedMeanwhile) {
-            hidden.viewModel.get()
-                ?.let { invoke0(it, "getTrackSelectionHelper") }
-                ?.let { call(it, "selectInitialTracks") }
+        val current = field.get(selector) ?: return
+        if (videoTypeDisabled(current) == false) return
+        if (enableVideoType(selector, field, current)) {
+            module.info("Jellyfin：回到前台，打开视频轨")
+        } else {
+            module.warn("Jellyfin：打开视频轨失败")
         }
-        module.info(
-            "Jellyfin：回到前台，打开视频轨" + if (changedMeanwhile) "（后台换过轨道，重新选音轨/字幕）" else "",
-        )
+    }
+
+    /**
+     * buildUpon().setTrackTypeDisabled(视频, false).build() 后交给轨道选择器。
+     * media3 被混淆，build() 声明成返回父类，Builder 上还有同形的 setRendererDisabled，
+     * 所以逐个试，并以禁用列表里不再有视频为准。
+     */
+    private fun enableVideoType(selector: Any, field: Field, current: Any): Boolean {
+        val buildUpon = buildUponMethod(current.javaClass) ?: return false
+        val builderClass = buildUpon.invoke(current)?.javaClass ?: return false
+        val build = buildMethod(builderClass, current.javaClass) ?: return false
+        for (toggle in builderToggles(builderClass)) {
+            val builder = buildUpon.invoke(current) ?: continue
+            if (runCatching { toggle.invoke(builder, TRACK_TYPE_VIDEO, false) }.isFailure) continue
+            val built = runCatching { build.invoke(builder) }.getOrNull() ?: continue
+            if (built.javaClass != current.javaClass) continue
+            if (videoTypeDisabled(built) != false) continue
+            val setter = findSetters(selector.javaClass, built.javaClass).firstOrNull() ?: return false
+            setter.invoke(selector, built)
+            return field.get(selector) === built
+        }
+        return false
+    }
+
+    /** 轨道选择器里能 buildUpon 的那个字段，就是轨道参数。 */
+    private fun parametersField(selector: Any): Field? =
+        instanceFields(selector.javaClass).firstOrNull { field ->
+            val value = runCatching { field.get(selector) }.getOrNull() ?: return@firstOrNull false
+            buildUponMethod(value.javaClass) != null && videoTypeDisabled(value) != null
+        }
+
+    private fun buildUponMethod(type: Class<*>): Method? =
+        type.methods.firstOrNull { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                method.parameterCount == 0 &&
+                builderToggles(method.returnType).isNotEmpty()
+        }?.apply { isAccessible = true }
+
+    private fun buildMethod(builderClass: Class<*>, parametersClass: Class<*>): Method? =
+        builderClass.methods.firstOrNull { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                method.parameterCount == 0 &&
+                method.returnType != Any::class.java &&
+                method.returnType.isAssignableFrom(parametersClass)
+        }?.apply { isAccessible = true }
+
+    /** Builder 上返回 Builder 的 (int, boolean) 方法。 */
+    private fun builderToggles(type: Class<*>): List<Method> {
+        if (type.isPrimitive || type == Void.TYPE || type == Any::class.java) return emptyList()
+        return type.methods.filter { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                method.parameterCount == 2 &&
+                method.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                method.parameterTypes[1] == java.lang.Boolean.TYPE &&
+                method.returnType != Void.TYPE &&
+                method.returnType.isAssignableFrom(type)
+        }.onEach { it.isAccessible = true }
+    }
+
+    /** 读轨道参数里唯一的 Set 字段（disabledTrackTypes）。认不出时返回 null。 */
+    private fun videoTypeDisabled(parameters: Any): Boolean? {
+        var clazz: Class<*>? = parameters.javaClass
+        var found: Set<*>? = null
+        while (clazz != null && clazz != Any::class.java) {
+            for (field in clazz.declaredFields) {
+                if (Modifier.isStatic(field.modifiers)) continue
+                if (!Set::class.java.isAssignableFrom(field.type)) continue
+                val value = runCatching {
+                    field.isAccessible = true
+                    field.get(parameters) as? Set<*>
+                }.getOrNull() ?: continue
+                if (found != null) return null
+                found = value
+            }
+            clazz = clazz.superclass
+        }
+        return found?.contains(TRACK_TYPE_VIDEO)
     }
 
     private fun trackUtilsMethod(name: String): Method? {

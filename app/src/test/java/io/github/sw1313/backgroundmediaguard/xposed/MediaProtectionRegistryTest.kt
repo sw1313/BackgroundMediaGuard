@@ -59,9 +59,19 @@ class MediaProtectionRegistryTest {
 
         assertTrue(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
         now += 30 * 60 * 1000L
-        assertFalse(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
+        assertTrue(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
     }
 
+    @Test
+    fun destroyedSessionFallsBackToRecentWindow() {
+        registry.update("session", "org.jellyfin.mobile", 10522, active = true)
+        now += 10_000
+        registry.remove("session")
+
+        assertTrue(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
+        now += 30 * 60 * 1000L
+        assertFalse(registry.retainsActivity("org.jellyfin.mobile", 30 * 60 * 1000L))
+    }
     @Test
     fun assetsPathsBitIsStrippedFromRelaunchChanges() {
         val assets = LowMemDestroyHook.CONFIG_ASSETS_PATHS
